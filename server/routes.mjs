@@ -5,6 +5,7 @@ import path from "node:path";
 
 import { TOOL_ROOT } from "./args.mjs";
 import { applyEdit, EditError } from "./edit.mjs";
+import { writeAtomic } from "./fsutil.mjs";
 import { inspect, outline } from "./html.mjs";
 import { readBody, safeJoin, sendJson } from "./index.mjs";
 import { watchDesign } from "./watch.mjs";
@@ -21,7 +22,7 @@ const hist = (f) => {
 };
 
 async function writeScreen(ctx, p, html) {
-  await fs.writeFile(p, html, "utf8");
+  await writeAtomic(p, html);
 }
 
 async function readScreen(ctx, file) {
@@ -44,7 +45,7 @@ async function readComments(ctx) {
   }
 }
 async function writeComments(ctx, comments) {
-  await fs.writeFile(path.join(ctx.dir, "comments.json"), JSON.stringify({ comments }, null, 1) + "\n", "utf8");
+  await writeAtomic(path.join(ctx.dir, "comments.json"), JSON.stringify({ comments }, null, 1) + "\n");
   ctx.broadcast({ type: "comments-changed" });
 }
 

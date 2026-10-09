@@ -17,9 +17,9 @@
 
 | 판정 | 개수 |
 | --- | --- |
-| PASS | 11 |
+| PASS | 12 |
 | PARTIAL | 29 |
-| MISSING | 31 |
+| MISSING | 30 |
 | N/A | 3 |
 | 합계 | 74 |
 
@@ -54,7 +54,7 @@
 | 13 | B 메모 | 포스트잇 너비·넘치면 스크롤·색 8가지 | 됨 | 너비 w만. 넘치면 늘어나고 색은 노랑 하나 | PARTIAL | 코드: `.note-sticky` 고정 색 | S |
 | 14 | B 메모 | 메모 옵션 size·bold·italic·page | 됨 | page만(현재 페이지로 생성). size·bold·italic 없음 | PARTIAL | 코드: `addNote` | S |
 | 15 | B 도형 | rect·oval·pen·line·arrow·image | 그려서 추가, 이미지 붙여넣기·업로드 | 없음 | MISSING | 코드 | L |
-| 16 | B 메모 | 이동·크기·삭제, 최대 200개 | 됨 | 이동·삭제(× 또는 Delete)·글 편집은 됨. 크기 조절·개수 제한 없음. 같은 ms에 두 번 추가하면 id가 겹쳐 하나가 덮이는 문제 발견(+제목·+메모 연속 클릭 → 메모만 남음) | PARTIAL | `B16.delete_selected_note`=true, `B12.notes_added`=["sticky"] | S |
+| 16 | B 메모 | 이동·크기·삭제, 최대 200개 | 됨 | 이동·삭제(× 또는 Delete)·글 편집은 됨. 메모 id 겹침 고침(시간+무작위, 겹치면 다시). 크기 조절·개수 제한 없음 | PARTIAL | B16.delete_selected_note=true · 코드: addNote id | S |
 | 17 | C 편집 | hover·클릭·Shift·Esc·보드 전체 선택 | 됨 | hover 외곽선, 클릭, Shift 다중, Esc 상위 됨. 보드 전체 선택 없음 | PARTIAL | `C17.hover_box`=1, `selected_path`=0/1/1/5, `shift_multi`=2, `esc_parent`=0/1/1 · `C17-select.png` | S |
 | 18 | C 편집 | 그 자리에서 글자 고치기(여러 줄) | 됨 | 글자 하나만 있는 요소는 됨(원본 그 글자만 바뀜). Shift+Enter 줄바꿈은 textContent로 저장돼 사라짐. 자식이 있으면 거부 | PARTIAL | `C18.settext_diff`(1줄) · 코드: `onTextEdit`의 `textContent` | M |
 | 19 | C 편집 | 요소 끌어 옮기기·크기·정렬 | 캔버스에서 바로 | 없음(레이어 목록 끌기만) | MISSING | 코드 | L |
@@ -102,7 +102,7 @@
 | 61 | J 추가 | 보드 검색·이동 | – | 없음 | MISSING | 코드 | S |
 | 62 | J 추가 | Windows 경로·감시 | – | 코드상 `path.sep`으로 나누고 URL은 `/`로 맞춤, chokidar 사용. 실제 Windows 미시험 | PARTIAL | 코드: `watch.mjs`, `safeJoin` | S |
 | 63 | J 추가 | 보안(127.0.0.1, 경로 탈출) | – | 127.0.0.1에만 열림, `/screens/..%2F` 404, `/api/file?f=../` 400 | PASS | `J63.*` | S |
-| 64 | J 추가 | 원자적 쓰기(임시 파일 → 교체) | – | `fs.writeFile`로 바로 씀(HTML·board.json·comments.json). 쓰는 중 꺼지면 파일이 잘릴 수 있음 | MISSING | 코드: `routes.mjs` `writeScreen`, `board.mjs` | S |
+| 64 | J 추가 | 원자적 쓰기(임시 파일 → 교체) | – | HTML·board.json·comments.json을 같은 폴더 임시 파일(.dc-tmp-*)에 쓴 뒤 rename. 권한 유지, 실패하면 임시 파일 지움. 감시기는 .으로 시작하는 파일 무시 | PASS | 단위 테스트 fsutil 2개, e2e core: 편집 뒤 .dc-tmp 없음·임시 파일 rename에도 감시 반영 1초 안 | S |
 | 65 | J 추가 | 우클릭 메뉴(보드·요소·빈 캔버스) | 됨 | 없음(브라우저 기본 메뉴) | MISSING | `J65.context_menu_custom`=0 | M |
 | 66 | J 추가 | 캔버스 상태 기억(확대·위치·페이지·패널) | 됨 | 없음(localStorage 비어 있음) | MISSING | `J66.local_storage_keys`=[] | S |
 | 67 | J 추가 | 미니맵·보드 목록 패널 | 레이어·보드 탐색 | 없음 | MISSING | 코드 | M |

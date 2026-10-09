@@ -3,6 +3,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
+import { writeAtomic } from "./fsutil.mjs";
+
 const DEFAULT_SIZE = { w: 390, h: 844 };
 const GAP_X = 80;
 const GAP_Y = 120;
@@ -35,7 +37,7 @@ export function createBoardStore(dir) {
     // 직렬 저장: 동시에 두 요청이 와도 파일이 섞이지 않게 한다
     const text = JSON.stringify(board, null, 1) + "\n";
     lastWritten = text;
-    writing = writing.then(() => fs.writeFile(boardPath, text, "utf8"));
+    writing = writing.then(() => writeAtomic(boardPath, text));
     await writing;
   }
 

@@ -174,7 +174,9 @@ export function App() {
   };
 
   const addNote = (kind: Note["kind"]) => {
-    const id = `n${Date.now().toString(36)}`;
+    let id = "";
+    do id = `n${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    while (boardRef.current?.notes[id]);
     const cx = (window.innerWidth / 2 - view.x) / view.zoom;
     const cy = (window.innerHeight / 2 - view.y) / view.zoom;
     update((b) => ({

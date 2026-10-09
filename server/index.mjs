@@ -66,24 +66,36 @@ async function serveFile(res, file) {
   }
 }
 
+/** app/ 아래 파일이 dist/index.html보다 새로우면 다시 빌드한다 */
+async function appIsStale(distDir) {
+  const built = await fs.stat(path.join(distDir, "index.html")).catch(() => null);
+  if (!built) return true;
+  let newest = 0;
+  const walk = async (d) => {
+    for (const e of await fs.readdir(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) await walk(p);
+      else newest = Math.max(newest, (await fs.stat(p)).mtimeMs);
+    }
+  };
+  await walk(path.join(TOOL_ROOT, "app"));
+  for (const f of ["vite.config.mjs", "package.json"]) newest = Math.max(newest, (await fs.stat(path.join(TOOL_ROOT, f))).mtimeMs);
+  return newest > built.mtimeMs;
+}
+
 export async function createServer({ dir, port, dev = true, extraRoutes = [] }) {
   if (!existsSync(dir)) throw new Error(`디자인 폴더가 없어요: ${dir}`);
   const store = createBoardStore(dir);
   const ctx = { dir, store, broadcast: () => {} };
 
-  // 앱 화면: 개발은 Vite 미들웨어, 빌드가 있으면 dist 정적 서빙
-  let vite = null;
+  // 앱 화면: 시작할 때 앱 소스가 dist보다 새로우면 한 번 빌드하고 dist를 정적 서빙한다.
+  // (Vite 개발 서버는 HMR을 꺼도 웹소켓 클라이언트를 넣어 콘솔 오류가 나서 쓰지 않는다)
   const distDir = path.join(TOOL_ROOT, "dist");
-  if (dev || !existsSync(distDir)) {
-    const { createServer: createVite } = await import("vite");
-    vite = await createVite({
-      root: path.join(TOOL_ROOT, "app"),
-      configFile: path.join(TOOL_ROOT, "vite.config.mjs"),
-      server: { middlewareMode: true, hmr: false },
-      appType: "spa",
-      logLevel: "warn",
-    });
+  if (dev && (await appIsStale(distDir))) {
+    const { build } = await import("vite");
+    await build({ root: path.join(TOOL_ROOT, "app"), configFile: path.join(TOOL_ROOT, "vite.config.mjs"), logLevel: "warn" });
   }
+  if (!existsSync(path.join(distDir, "index.html"))) throw new Error("앱 빌드가 없어요(npm start로 실행하면 만들어져요)");
 
   const routes = [
     ["GET", "/api/health", async (req, res) => sendJson(res, 200, { ok: true, dir })],
@@ -147,9 +159,12 @@ export async function createServer({ dir, port, dev = true, extraRoutes = [] }) 
         if (req.method === m && url.pathname === p) return await h(req, res, url);
       }
       if (url.pathname.startsWith("/api/")) return sendJson(res, 404, { error: "없는 API" });
-      if (vite) return vite.middlewares(req, res, () => res.end());
-      const p = safeJoin(distDir, url.pathname === "/" ? "index.html" : url.pathname.slice(1));
-      if (p && (await serveFile(res, p))) return;
+      if (url.pathname.startsWith("/_app/")) {
+        const p = safeJoin(distDir, url.pathname.slice("/_app/".length));
+        if (p && (await serveFile(res, p))) return;
+        res.writeHead(404);
+        return res.end("not found");
+      }
       await serveFile(res, path.join(distDir, "index.html"));
     } catch (e) {
       console.error(e);
@@ -175,7 +190,6 @@ export async function createServer({ dir, port, dev = true, extraRoutes = [] }) 
     async close() {
       for (const c of wss.clients) c.terminate();
       wss.close();
-      await vite?.close();
       await new Promise((r) => server.close(r));
     },
   };
