@@ -109,7 +109,8 @@ export function Minimap({ rects, selected, view, size, onJump }: { rects: (Rect 
   const dragging = useRef(false);
   const jump = (e: React.PointerEvent) => {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    onJump((e.clientX - r.left - ox) / s + box.x, (e.clientY - r.top - oy) / s + box.y);
+    const k = r.width / W; // 좁은 창에서는 CSS로 줄여 그린다
+    onJump(((e.clientX - r.left) / k - ox) / s + box.x, ((e.clientY - r.top) / k - oy) / s + box.y);
   };
   return (
     <div

@@ -210,6 +210,7 @@ export function App() {
     restored.current = true;
     const s = loadSaved(board.title);
     if (s.left != null) setLeftOpen(s.left);
+    else if (window.innerWidth < 1000) setLeftOpen(false);
     if (s.minimap != null) setMinimapOpen(s.minimap);
     const launch = board.launch;
     if (launch?.page) setPage(launch.page);
