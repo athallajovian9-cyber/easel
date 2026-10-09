@@ -79,7 +79,7 @@ export async function createServer({ dir, port, dev = true, extraRoutes = [] }) 
     vite = await createVite({
       root: path.join(TOOL_ROOT, "app"),
       configFile: path.join(TOOL_ROOT, "vite.config.mjs"),
-      server: { middlewareMode: true, hmr: { port: port + 1 } },
+      server: { middlewareMode: true, hmr: false },
       appType: "spa",
       logLevel: "warn",
     });

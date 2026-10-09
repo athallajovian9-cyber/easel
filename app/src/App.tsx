@@ -4,7 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { api, clientId, connectEvents, type ServerEvent } from "./api";
 import { Canvas, fitView, isTyping } from "./Canvas";
+import { elementAt, rectOf } from "./editor";
+import { Inspector, type Comment } from "./Inspector";
 import { Play } from "./Play";
+import { useEditMode } from "./useEditMode";
 import type { Board, BoardItem, BoardResponse, Note, View } from "./types";
 
 const SAVE_DELAY = 300;
@@ -22,6 +25,12 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [canvasSize, setCanvasSize] = useState<{ w: number; h: number } | null>(null);
   const fitted = useRef(false);
+  const frames = useRef(new Map<string, HTMLIFrameElement>());
+  const [frameTick, setFrameTick] = useState(0);
+  const [comments, setComments] = useState<Comment[]>([]);
+  const getFrame = useCallback((f: string) => frames.current.get(f) ?? null, [frameTick]);
+  const edit = useEditMode(editFile, getFrame);
+  const loadComments = useCallback(() => api.get<{ comments: Comment[] }>("/api/comments").then((r) => setComments(r.comments)).catch(() => {}), []);
   const saveTimer = useRef<number | null>(null);
   const boardRef = useRef<Board | null>(null);
   boardRef.current = board;
@@ -39,7 +48,8 @@ export function App() {
 
   useEffect(() => {
     void load(true);
-  }, [load]);
+    void loadComments();
+  }, [load, loadComments]);
 
   // 처음 한 번: 보드와 캔버스 크기를 둘 다 알면 전체 보기
   useEffect(() => {
@@ -73,8 +83,9 @@ export function App() {
           setReloadKeys((k) => ({ ...k, [e.file]: (k[e.file] ?? 0) + 1 }));
           if (e.kind !== "change") void load(false);
         } else if (e.type === "board-changed" && e.source !== clientId) void load(false);
+        else if (e.type === "comments-changed") void loadComments();
       }),
-    [load],
+    [load, loadComments],
   );
 
   const pages = board?.pages ?? [];
@@ -158,6 +169,34 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [selectedNote, update]);
 
+  /** 보드 위 오버레이: 편집 중이면 외곽선·선택, 댓글 핀 */
+  const renderOverlay = (f: string) => {
+    const pins = comments.filter((c) => c.file === f && !c.resolved);
+    const doc = frames.current.get(f)?.contentDocument;
+    const editing = editFile === f;
+    if (!editing && !pins.length) return null;
+    return (
+      <div className="overlay">
+        {editing && edit.state.hover && !edit.state.paths.includes(edit.state.hover.path) && <Box r={edit.state.hover.rect} cls="hover" />}
+        {editing && edit.state.rects.map((r, i) => <Box key={i} r={r} cls="sel" />)}
+        {pins.map((c, i) => {
+          const el = doc && c.path ? elementAt(doc, c.path) : null;
+          const r = el ? rectOf(el) : null;
+          return (
+            <div
+              key={c.id}
+              className="pin"
+              title={c.text}
+              style={r ? { left: r.x + r.w - 12, top: r.y - 12, transform: `scale(${1 / Math.max(view.zoom, 0.25)})` } : { right: 8, top: 8 + i * 30, transform: `scale(${1 / Math.max(view.zoom, 0.25)})` }}
+            >
+              {i + 1}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   if (!board || !data) return <div className="loading">{error ?? "불러오는 중…"}</div>;
 
   return (
@@ -199,6 +238,7 @@ export function App() {
         )}
         {error && <span className="warn">{error}</span>}
       </header>
+      <div className="main">
       <Canvas
         board={board}
         files={data.files}
@@ -230,9 +270,30 @@ export function App() {
           setSelectedNote(null);
         }}
         onPlay={setPlayFile}
-        onEdit={setEditFile}
+        onEdit={(f) => {
+          setEditFile(f);
+          if (f) setSelectedBoard(f);
+        }}
         onSize={setCanvasSize}
+        renderBoardOverlay={renderOverlay}
+        iframeRef={(f, el) => {
+          // ref 콜백은 렌더마다 null → el로 다시 불린다. 정말 새 iframe일 때만 갱신한다
+          if (el && frames.current.get(f) !== el) {
+            frames.current.set(f, el);
+            setFrameTick((t) => t + 1);
+          }
+        }}
       />
+      <Inspector
+        file={editFile ?? selectedBoard}
+        editing={!!editFile}
+        selection={edit.state.selection}
+        multi={edit.state.paths.length}
+        error={edit.state.error}
+        comments={comments}
+        onSelectPath={(p) => editFile && void edit.select([p])}
+      />
+      </div>
       {playFile && (
         <Play
           board={board}
@@ -247,4 +308,8 @@ export function App() {
       )}
     </div>
   );
+}
+
+function Box({ r, cls }: { r: { x: number; y: number; w: number; h: number }; cls: string }) {
+  return <div className={`box ${cls}`} style={{ left: r.x, top: r.y, width: r.w, height: r.h }} />;
 }
