@@ -6,6 +6,7 @@ import { api, clientId, connectEvents, type ServerEvent } from "./api";
 import { Canvas, clamp, fitView, isTyping, MAX_ZOOM, MIN_ZOOM, type ContextTarget, type Rect } from "./Canvas";
 import { AssetGrid, AssetPicker, uploadAssets, type Asset } from "./assets";
 import { ChatPanel, type Attach, type ChatEvent } from "./chat";
+import { CheckList, checkA11y, readTweaks, TokenPanel, TweaksPanel, useTokens, type A11yItem, type LintItem, type Tokens } from "./ds";
 import { GuidesEditor, GuidesOverlay, MAX_NOTES, NoteOptions, ShapeDrawer, ShapeOptions, ShapesLayer } from "./drawing";
 import { alignOps, EditHandles, type DropPlan } from "./elementDrag";
 import { elementAt, inlineStyles, pathOf, rectOf } from "./editor";
@@ -85,10 +86,25 @@ export function App() {
   }, []);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
   const savingRef = useRef(0);
-  const [leftTab, setLeftTab] = useState<"boards" | "assets">("boards");
+  const [leftTab, setLeftTab] = useState<"boards" | "assets" | "tokens">("boards");
   const [assetsVersion, setAssetsVersion] = useState(0);
   const [picker, setPicker] = useState<null | ((a: Asset) => void)>(null);
   const [selectedShape, setSelectedShape] = useState<string | null>(null);
+  const [tokensVersion, setTokensVersion] = useState(0);
+  const tokens = useTokens(tokensVersion);
+  const [author, setAuthor] = useState<string>(() => {
+    try {
+      return localStorage.getItem("design-canvas:author") ?? "";
+    } catch {
+      return "";
+    }
+  });
+  useEffect(() => {
+    if (!author) api.get<{ name: string }>("/api/me").then((r) => r.name && setAuthor(r.name)).catch(() => {});
+  }, []);
+  const [lint, setLint] = useState<LintItem[] | null>(null);
+  const [a11y, setA11y] = useState<A11yItem[] | null>(null);
+  const pendingPick = useRef<{ file: string; path: string } | null>(null);
   const [guidesOn, setGuidesOn] = useState(true);
   const [theme, setTheme] = useState<Theme>(() => {
     try {
@@ -356,6 +372,7 @@ export function App() {
         else if (e.type === "history-changed") void loadHistory();
         else if (e.type === "errors-changed") void loadErrors();
         else if (e.type === "assets-changed") setAssetsVersion((v) => v + 1);
+        else if (e.type === "tokens-changed") setTokensVersion((v) => v + 1);
         else if (e.type === "chat") for (const fn of chatListeners.current) fn(e.id, e.ev);
       }),
     [load, loadComments, loadHistory, loadErrors],
@@ -843,6 +860,74 @@ export function App() {
     }
   };
 
+  /* ---------- 디자인 시스템·검사·스냅숏 ---------- */
+  const saveTokens = async (t: Tokens, label: string) => {
+    try {
+      await api.put("/api/tokens", { ...t, label });
+      setTokensVersion((v) => v + 1);
+      toast({ tone: "ok", text: label === "테마 바꾸기" ? `테마: ${t.active}` : "토큰을 저장했어요", action: undoAction });
+    } catch (e) {
+      toast({ tone: "error", text: String((e as Error).message) });
+    }
+  };
+  /** 검사 목록에서 고르면 그 보드를 편집 모드로 열고 그 요소를 고른다 */
+  const pickPath = (file: string, path: string) => {
+    pendingPick.current = { file, path };
+    if (editFile !== file) setEditFile(file);
+    else void edit.select([path]);
+  };
+  useEffect(() => {
+    const p = pendingPick.current;
+    if (!p || editFile !== p.file || !frames.current.get(p.file)?.contentDocument) return;
+    const t = window.setTimeout(() => {
+      pendingPick.current = null;
+      void edit.select([p.path]);
+    }, 300);
+    return () => window.clearTimeout(t);
+  }, [editFile, frameTick]);
+  const lintTarget = editFile ?? (selected.length === 1 ? selected[0] : null);
+  useEffect(() => {
+    if (!lintTarget) return setLint(null);
+    api.get<{ files: Record<string, LintItem[]> }>(`/api/lint?f=${encodeURIComponent(lintTarget)}`).then((r) => setLint(r.files[lintTarget] ?? [])).catch(() => setLint(null));
+  }, [lintTarget, reloadKeys[lintTarget ?? ""], tokensVersion]);
+  useEffect(() => {
+    if (!lintTarget) return setA11y(null);
+    const run = () => {
+      const doc = frames.current.get(lintTarget)?.contentDocument;
+      setA11y(doc?.readyState === "complete" ? checkA11y(doc, tokens?.minTarget ?? 48) : null);
+    };
+    const t = window.setTimeout(run, 600);
+    return () => window.clearTimeout(t);
+  }, [lintTarget, frameTick, reloadKeys[lintTarget ?? ""], tokens?.minTarget, view.zoom >= 0.25]);
+  const snapshotMenu = async (at: { clientX: number; clientY: number }) => {
+    const s = await api.get<{ git: boolean; branch?: string; changed: number; snapshots: { hash: string; author: string; when: string; subject: string }[] }>("/api/snapshots").catch(() => null);
+    if (!s?.git) return setMenu({ x: at.clientX, y: at.clientY, title: "스냅숏", items: [{ label: "디자인 폴더가 git 저장소 밖이에요", disabled: true, run: () => {} }] });
+    setMenu({
+      x: at.clientX,
+      y: at.clientY,
+      title: `스냅숏 · ${s.branch} · 바뀐 파일 ${s.changed}`,
+      items: [
+        {
+          label: s.changed ? "지금 스냅숏 남기기(git 커밋)…" : "바뀐 것이 없어요",
+          icon: "check",
+          disabled: !s.changed,
+          run: async () => {
+            const r = await ask.prompt({ title: "스냅숏 남기기", label: "메시지", value: `docs(design): 디자인 스냅숏 ${new Date().toLocaleDateString("ko-KR")}`, hint: "디자인 폴더만 커밋해요. 작성자는 git 설정 그대로이고, 다른 스테이징은 섞이지 않아요.", ok: "커밋" });
+            if (!r) return;
+            try {
+              const res = await api.post<{ hash?: string; nothing?: boolean }>("/api/snapshot", { message: r.value });
+              toast({ tone: "ok", text: res.nothing ? "바뀐 것이 없어요" : `스냅숏 ${res.hash}` });
+            } catch (e) {
+              toast({ tone: "error", text: String((e as Error).message) });
+            }
+          },
+        },
+        "sep",
+        ...s.snapshots.slice(0, 10).map((x) => ({ label: `${x.hash} ${x.subject.slice(0, 40)} · ${x.when}`, disabled: true, run: () => {} })),
+      ],
+    });
+  };
+
   /* ---------- 단축키 ---------- */
   const keyRef = useRef<(e: KeyboardEvent) => void>(() => {});
   keyRef.current = (e: KeyboardEvent) => {
@@ -1028,6 +1113,9 @@ export function App() {
       <button role="tab" aria-selected={leftTab === "assets"} className={leftTab === "assets" ? "on" : ""} onClick={() => setLeftTab("assets")}>
         자산
       </button>
+      <button role="tab" aria-selected={leftTab === "tokens"} className={leftTab === "tokens" ? "on" : ""} onClick={() => setLeftTab("tokens")}>
+        토큰
+      </button>
     </div>
   );
   const rects = visibleBoards.map((f) => ({ file: f, ...board.boards[f] }));
@@ -1076,6 +1164,21 @@ export function App() {
           </span>
         )}
         <div className="spacer" />
+        {tokens && Object.keys(tokens.themes).length > 0 && (
+          <label className="theme-pick" title="디자인 시스템 테마(스와치·토큰 검사·AI에 쓰임)">
+            <span className="sr-only">테마</span>
+            <select value={tokens.active} aria-label="테마" onChange={(e) => void saveTokens({ ...tokens, active: e.target.value }, "테마 바꾸기")}>
+              {Object.keys(tokens.themes).map((n) => (
+                <option key={n} value={n}>
+                  테마: {n}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <button className="icon-btn" aria-label="스냅숏(git)" title="스냅숏: 디자인 폴더를 git 커밋으로 저장" aria-haspopup="menu" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); void snapshotMenu({ clientX: r.left, clientY: r.bottom + 4 }); }}>
+          <Icon name="layers" />
+        </button>
         {erroredFiles.length > 0 && (
           <button
             className="err-chip"
@@ -1133,7 +1236,12 @@ export function App() {
       </header>
       <div className="main">
         {leftOpen && (
-          leftTab === "assets" ? (
+          leftTab === "tokens" ? (
+            <aside className="left" aria-label="디자인 토큰">
+              {leftTabs}
+              {tokens ? <TokenPanel tokens={tokens} onSave={(t, label) => void saveTokens(t, label)} /> : <p className="empty">불러오는 중…</p>}
+            </aside>
+          ) : leftTab === "assets" ? (
             <aside className="left" aria-label="자산">
               {leftTabs}
               <AssetGrid version={assetsVersion} onError={(m) => toast({ tone: "error", text: m })} onUploaded={(a) => toast({ tone: "ok", text: `${a.map((x) => x.name).join(", ")}를 올렸어요` })} />
@@ -1279,6 +1387,17 @@ export function App() {
           </div>
           {rightTab === "inspect" && (
         <Inspector
+          author={author || "나"}
+          onAuthor={async () => {
+            const r = await ask.prompt({ title: "댓글 작성자", label: "이름", value: author, ok: "저장" });
+            if (!r?.value.trim()) return;
+            setAuthor(r.value.trim());
+            try {
+              localStorage.setItem("design-canvas:author", r.value.trim());
+            } catch {
+              /* 무시 */
+            }
+          }}
           onAskAI={(c) => {
             setChatAttach((a) => ({ ...a, comments: a.comments.some((x) => x.id === c.id) ? a.comments : [...a.comments, { id: c.id, text: c.text, file: c.file }] }));
             openChat(chatDraft || "이 댓글대로 그 위치만 고쳐 줘", [c.file]);
@@ -1306,6 +1425,26 @@ export function App() {
               }
               onDelete={() => deleteNote(selectedNote)}
             />
+          )}
+          {!editFile && one && board.boards[one] && (
+            <TweaksPanel
+              key={`${one}-${reloadKeys[one] ?? 0}-${frameTick}`}
+              doc={readTweaks(frames.current.get(one)?.contentDocument) ? frames.current.get(one)!.contentDocument : null}
+              onSave={async (values) => {
+                try {
+                  await api.post("/api/edit", { file: one, op: "setTweaks", values });
+                  toast({ tone: "ok", text: "Tweaks를 원본에 저장했어요", action: undoAction });
+                } catch (e) {
+                  toast({ tone: "error", text: String((e as Error).message) });
+                }
+              }}
+            />
+          )}
+          {lintTarget && board.boards[lintTarget] && (
+            <>
+              <CheckList title={`토큰 검사 · ${tokens?.active ?? ""}`} items={lint} empty="토큰 밖 값이 없어요" onPick={(p) => pickPath(lintTarget, p)} onAskAI={() => openChat(`토큰 밖 값을 토큰으로 바꿔 줘(check_tokens로 확인):\n${(lint ?? []).slice(0, 12).map((x) => `- ${x.path ?? "줄 " + x.line}: ${x.message}`).join("\n")}`, [lintTarget])} />
+              <CheckList title="접근성" items={a11y} empty="누르는 영역·명암·라벨 문제가 없어요" onPick={(p) => pickPath(lintTarget, p)} onAskAI={() => openChat(`접근성 문제를 고쳐 줘(보이는 크기는 그대로 두고 누르는 영역은 여백으로):\n${(a11y ?? []).slice(0, 12).map((x) => `- ${x.path}: ${x.message}`).join("\n")}`, [lintTarget])} />
+            </>
           )}
           {!editFile && one && board.boards[one] && (
             <GuidesEditor
@@ -1351,6 +1490,16 @@ export function App() {
             const paths = edit.state.paths;
             return (
               <Properties
+                tokens={tokens}
+                bg={(() => {
+                  let n: Element | null = el;
+                  const w = el?.ownerDocument.defaultView;
+                  for (; n && w; n = n.parentElement) {
+                    const c = w.getComputedStyle(n).backgroundColor;
+                    if (c && !/rgba\(0, 0, 0, 0\)|transparent/.test(c)) return c;
+                  }
+                  return "rgb(255, 255, 255)";
+                })()}
                 onAlign={async (dir) => {
                   const d = frames.current.get(editFile)?.contentDocument;
                   const ops = d && alignOps(d, sel.path, sel.hash, dir);

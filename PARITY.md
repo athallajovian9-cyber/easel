@@ -17,10 +17,10 @@
 
 | 판정 | 개수 |
 | --- | --- |
-| PASS | 51 |
-| PARTIAL | 12 |
-| MISSING | 8 |
-| N/A | 3 |
+| PASS | 61 |
+| PARTIAL | 7 |
+| MISSING | 4 |
+| N/A | 2 |
 | 합계 | 74 |
 
 렌더링은 같다. 98장 모두 캔버스 안과 직접 연 화면의 픽셀 차이가 1% 미만이었다(최대 0.127%).
@@ -70,19 +70,19 @@
 | 29 | D 프로토 | 링크(상대·`/`루트·`#id`·외부 새 탭) | 모두 | 상대 경로·#id는 브라우저 기본. /로 시작하는 링크는 screens/에 같은 파일이 있으면 302로 그리로(없으면 404). Play에서 다른 출처 링크는 새 탭 | PASS | e2e: /scr-02.html → 302 /screens/scr-02.html, /nope.html 404 · 코드: Play.tsx 다른 출처 window.open | S |
 | 30 | D 프로토 | 스크립트(상태·이벤트·조건·반복) | 됨 | iframe에서 그대로 실행 | PASS | `D30.script_runs`: 버튼 두 번 → "2" | S |
 | 31 | D 프로토 | 다른 보드 끼워 넣기, 원본 바뀌면 갱신 | dc-import가 따라 바뀜 | 화면마다 iframe src를 색인해, 원본이 바뀌면 그 화면을 직접·간접으로 끼운 보드도 다시 불러옴 | PASS | 단위 테스트 deps(직접·간접), e2e: scr-15 수정 → f-3 안 iframe에 반영 4초 안 | S |
-| 32 | D 프로토 | Tweaks(색·enum·boolean·숫자 조절) | 패널에서 조절 | 없음(PLAN 범위 밖). 대체 제안: `:root`의 CSS 변수와 `<meta name="tweak" …>` 선언을 읽어 속성 패널에 표시 | MISSING | PLAN 0장 범위 밖 | M |
+| 32 | D 프로토 | Tweaks(색·enum·boolean·숫자 조절) | 패널에서 조절 | <script type="application/json" id="board-tweaks">에 color·number(min·max·unit)·boolean·enum과 CSS 변수 선언 → 오른쪽 'Tweaks'에서 조절하면 바로 CSS 변수·data-tweak-* 적용, '원본에 저장'은 JSON value만 바꿈(실행 취소). 캔버스가 보낼 때 저장값을 변수로 적용 | PASS | 단위 setTweaks; ux 스크립트: 로드 시 --accent #C94F0C, 조절 → 4px·rgb(17,17,17)·on, 저장 후 value 3개; .out/ux/p5-32-tweaks.png | M |
 | 33 | E AI | AI가 새 HTML → 즉시 보드·자동 배치 | 됨 | 323ms 안에 보드가 생기고 board-size 메타 크기로 '새 화면' 줄에 배치. Claude Code·Codex 둘 다 새 화면 생성 → 자동 배치 → `place_board` 제목 확인 | PASS | `E33.*`, Claude Code(.mcp.json, claude -p) 2026-10-09: zz-claude-test.html 생성·제목 'Claude 시험' 캔버스 표시, Codex(M7) 같은 결과 | S |
 | 34 | E AI | AI 수정 즉시 반영(스크롤·선택 유지) | 됨 | 484ms에 그 보드만 다시 불러오고 같은 경로로 다시 선택. Claude Code·Codex 모두 "선택한 것 고쳐" → 그 글자만 바뀌고 캔버스 반영. 스크롤 되돌림은 스크롤 있는 보드에서 아직 시험 못 함 | PARTIAL | `E34.reflect_ms`=484, Claude Code: scr-32 0/1/1/5 글자만 수정(diff 1줄)·캔버스 반영 true, Codex(M7) 같은 결과 | S |
 | 35 | E AI | 선택 인식 정보 | mode, page, pageName, visible·selectedArtboards, 요소 kind·label, dirty, edits | get_selection = selection(+kind·label) · mode(canvas/edit/focus/play) · page·pageName · visibleArtboards · selectedArtboards · dirty · edits(최근 기록) · erroredArtboards·firstError. 앱이 화면 상태를 PUT /api/context로 알림 | PASS | ux 스크립트 MCP: get_selection 키 10개; 편집 모드 a.btn → kind link·label '문의 보내기'·selectedArtboards [scr-32.html] | M |
 | 36 | E AI | 오류 난 보드 목록·"고쳐 달라" | erroredArtboards, firstError, Ask Claude to fix | 서버가 화면 HTML <head>에 오류 수집 스크립트를 끼워(파일은 그대로) 스크립트 오류·불러오지 못한 리소스를 모음. 도구 막대 '오류 N' 메뉴·왼쪽 목록 경고·보드 우클릭 'AI에게 오류 고쳐 달라기'가 채팅에 오류 내용을 넣어 엶. MCP list_errors | PASS | ux 스크립트: zz-err.html → firstError 'undefinedFn is not defined'(줄 1), 고쳐 달라기 초안 채움; .out/ux/p2-36-*.png | M |
-| 37 | E AI | AI가 댓글 읽기·답하기·해결 | 됨 | list·add·resolve 됨. 답글(스레드) 없음 | PARTIAL | MCP 도구 목록 | S |
+| 37 | E AI | AI가 댓글 읽기·답하기·해결 | 됨 | AI: list_comments(답글 포함)·add_comment·reply_comment(resolve 선택)·resolve_comment, 채팅에서 댓글 보내기 | PASS | ux 스크립트 MCP: reply_comment → 답글 2개 | S |
 | 38 | E AI | AI가 배치·제목·페이지·메모 변경 | 캔버스 파일 전체를 쓴다 | place_board + create_board(틀) + list/add/update/delete_note + list_pages·manage_page(add·rename·delete·move). 모두 앱 실행 취소 기록에 남음 | PASS | ux 스크립트 MCP: add_note→list_notes에 있음, update·delete, 페이지 '시안' 추가, create_board doc | S |
 | 39 | E AI | 스크린샷(보드·요소) | 됨 | 보드 전체·요소 하나 PNG(@2x) | PASS | M4 시험: `.out/scr-32--0-1-1-5.png` | S |
-| 40 | F DS | 토큰 등록·테마 메뉴 | 디자인 시스템 설치·테마 선택 | 없음(PLAN 범위 밖) | MISSING | PLAN 0장 | L |
-| 41 | F DS | 색·글꼴 입력에 토큰 스와치 | 됨 | 색·배경에 토큰 7색 스와치. 글꼴·간격 토큰 없음 | PARTIAL | `C20-props.png` | S |
-| 42 | F DS | 토큰 밖 값 경고 | AI 결과 검사 | 없음(레포 밖 check.py만 있었음) | MISSING | 코드 | M |
-| 43 | G 협업 | 댓글 고정·목록·답글·해결·작성자 | 됨 | 요소·보드 고정 핀, 목록, 해결·다시 열기, 작성자. 답글 없음. 축소 상태 보드는 핀이 오른쪽 위에 쌓임 | PARTIAL | M4 댓글 API 시험 · 코드: `renderOverlay` | S |
-| 44 | G 협업 | 버전 저장·분기 | 기본 기록 없음, Claude에게 저장 요청 | git 커밋·브랜치로 대체 | N/A | 공식 도움말: 버전 기록 아직 없음 | – |
+| 40 | F DS | 토큰 등록·테마 메뉴 | 디자인 시스템 설치·테마 선택 | 왼쪽 '토큰' 탭: README 표 기본값으로 시작 → 테마(복사해 추가·이름·색 추가/빼기/이름)·글자 크기·굵기·모서리·간격·누르는 영역 편집 → '토큰 등록'으로 docs/design/tokens.json(실행 취소 기록). 도구 막대 '테마' 메뉴로 쓰는 테마 바꾸기. MCP get_tokens | PASS | ux 스크립트: 기본 8색 → '어두운 시안' 추가·등록 → 테마 메뉴로 '기본'; .out/ux/p5-40-*.png | L |
+| 41 | F DS | 색·글꼴 입력에 토큰 스와치 | 됨 | 속성 패널: 색·배경 스와치가 고른 테마 색, 글자 크기·모서리·gap·padding에 토큰 칩 | PASS | ux 스크립트: 칩 34·22·17·16·15, 스와치 8; .out/ux/p5-41-71-props.png | S |
+| 42 | F DS | 토큰 밖 값 경고 | AI 결과 검사 | 토큰 밖 값 검사(색·글자 크기·굵기·모서리·4 단위 아닌 간격, style 속성과 <style> 모두): 오른쪽 '토큰 검사' 목록(누르면 그 요소 편집), 속성 칸 ⚠, 'AI에게 고쳐 달라기', MCP check_tokens. 98장 실제 검사 211건(a:hover #000000 98, 모서리 12px 57 등) | PASS | 단위 tokens.test.mjs 3개; ux 스크립트: 13px 입력 → ⚠, zz-tweaks 2건; .out/ux/p5-42-55-checks.png | M |
+| 43 | G 협업 | 댓글 고정·목록·답글·해결·작성자 | 됨 | 요소·보드 핀, 목록, 답글(스레드)·'답하고 해결', 해결·다시 열기, 작성자(git user.name 기본, 바꿀 수 있음) | PASS | ux 스크립트: 답글 [시험 사용자, 확인했어요] + resolved; .out/ux/p5-43-replies.png | S |
+| 44 | G 협업 | 버전 저장·분기 | 기본 기록 없음, Claude에게 저장 요청 | 버전 대신 git 스냅숏: 도구 막대 '스냅숏' 메뉴 → 디자인 폴더만 커밋(작성자 git 설정, 다른 스테이징은 안 섞음, 훅 그대로), 최근 스냅숏 10개·바뀐 파일 수. MCP save_snapshot | PASS | ux 스크립트(임시 git 저장소): 바뀐 파일 4 → 커밋 '시험 사용자|docs(design): 디자인 스냅숏', status 깨끗; .out/ux/p5-44-snapshot-menu.png | – |
 | 45 | G 협업 | 공유·권한·실시간 공동 편집 | 보기·댓글·편집 권한 공유 | git push·PR로 공유하고 각자 로컬에서 실행 | N/A | – | – |
 | 46 | H 단축키 | ⌘Z ⌘⇧Z Delete ⌘D 화살표 ⌘A ⌘G 스페이스 ⌘0 ⌘1 ⌘C ⌘V | 됨 | ⌘Z ⌘⇧Z(⌘Y) Delete ⌘D(보드·요소) 화살표(Shift 10·Option 100, 편집 중엔 형제 선택·Option+↑↓ 순서) ⌘A ⌘G(편집 중 flex로 감싸기) ⌃G(가이드) 스페이스 ⌘0 ⌘1 ⌘± ⌘C ⌘V F6(영역 포커스) ⌘\\(양쪽 패널) ⌘K ⌘J F2 F E M V H B T N R O L A P Esc. 메뉴·툴팁에 표시 | PASS | ux 스크립트: ⌘\\ 패널 숨김, F6 toolbar→left, ↑ 형제 선택, Option+↓ 순서 바꿈, ⌘G 형제 둘 감싸기(shift.mjs) | M |
 | 47 | H 사용성 | 다크 모드·창 크기·휠 조작감 | 됨 | 도구 막대 화면 모드 단추: 시스템→밝게→어둡게(data-theme, 기억). 토큰 색은 다크에서도 4.5:1, 창 크기 줄면 패널 겹침 | PASS | ux 스크립트: light→dark→system; .out/ux/p4-47-dark.png | S |
@@ -93,15 +93,15 @@
 | 52 | J 추가 | "N가지 안" 나란히 | 변형 2~3개 제안 | 채팅 '안 N개'(2~4): 원본을 -v1…-vN으로 복사해 원본 아래 빈 줄에 나란히 두고, 에이전트에게 각각 다른 방향으로 고치라고 지시. 끝나면 그 자리로 이동 | PASS | 실제: Claude Code 48s·Codex 59s 모두 v1에 '당도순', v2에 '지도', 원본 그대로; .out/ux/p2-52-variants.png | S |
 | 53 | J 추가 | 템플릿·빈 보드에서 시작 | 템플릿 | 도구 막대 '새 보드' 메뉴: 빈 보드·모바일 화면·PC 화면·문서 틀(토큰 색·Pretendard), 우클릭 '여기에 모바일 화면 틀', MCP create_board(template) | PASS | ux 스크립트: 모바일 화면 → mobile.html 생성; .out/ux/p2-53-*.png | S |
 | 54 | J 추가 | 자산 보관함(이미지·폰트 업로드, 재사용) | 업로드 자산 | 왼쪽 '자산' 탭: docs/design/assets/ 이미지·폰트 썸네일, 올리기(단추·끌어 놓기, 이름 겹치면 -2), 누르면 경로 복사. 이미지 바꾸기 창과 같은 목록 | PASS | ux 스크립트: 'Test Logo.png' → assets/test-logo.png; .out/ux/p3-22-assets.png | M |
-| 55 | J 추가 | 접근성 검사(누르는 영역·명암비·label) | Claude에게 리뷰 요청 | 없음 | MISSING | 코드 | M |
+| 55 | J 추가 | 접근성 검사(누르는 영역·명암비·label) | Claude에게 리뷰 요청 | 오른쪽 '접근성' 목록: 누르는 영역(토큰 최소 48)·글자 명암(4.5, 큰 글자 3, 사진 위 제외)·이름 없는 버튼/입력·alt 없는 img. 누르면 그 요소 편집, 'AI에게 고쳐 달라기' | PASS | ux 스크립트: 24×24 버튼·이름 없음·alt 없음·명암 2.08 → 4건, 누르면 0/1 선택(edit) | M |
 | 56 | J 추가 | 한글 IME | 조합 중 Enter·blur에 깨지지 않음 | 글자 바로 고치기·메모·속성 칸·검색·채팅·입력 창: 조합 중 Enter 무시, 조합 중 포커스가 빠지면 compositionend 뒤 저장, iframe에서 조합 중 키는 단축키(⌘Z 등)로 넘기지 않음 | PASS | ux 스크립트(합성 composition 이벤트): 조합 중 Enter·blur → 저장 안 됨, compositionend 뒤 '농가들' 저장. 실제 IME 입력기는 자동화 불가 | S |
 | 57 | J 추가 | 캔버스 조작 실행 취소 | 됨 | 서버 한 기록(history.mjs)에 HTML 편집·보드 이동/크기/옵션/순서·메모·페이지·보드 만들기/삭제/복제/이름이 시간순으로 쌓임. ⌘Z/⌘⇧Z·도구 막대·우클릭·토스트에서 실행 취소, 밖에서 바뀌면 409로 기록 비움 | PASS | e2e `boards.e2e.mjs` 'HTML 편집 → 보드 옮기기 → ⌘Z 두 번이 역순'; 단위 17개 통과; .out/ux/p1-57-undo-toast.png | M |
 | 58 | J 추가 | board.json 충돌 최소화 | – | 보드·메모 키를 정렬하고 항목 하나를 한 줄로, 항목 사이 빈 줄 하나. 서버가 저장할 때 항상 이 형식. 기존 board.json은 값은 그대로 형식만 다시 씀(865→324줄) | PASS | 단위 테스트 boardFormat: 값 동일·한 줄·정렬·다시 써도 같음, git merge-file 병합 3가지(이웃 보드 각각 이동·메모 각각 추가·이동+메모) 충돌 0 | S |
 | 59 | J 추가 | HTML 이름 바꾸기·삭제 따라가기 | – | 이름을 바꾸면 새 보드가 자동 배치되고 옛 보드는 '파일 없음'과 '파일 없는 보드 1'로 표시. 따라가거나 정리하는 동작 없음 | PARTIAL | `J59.rename_result`, `J59.missing_badge` | S |
 | 60 | J 추가 | 요소를 다른 보드로 복사·붙여넣기 | 됨 | 편집 중 ⌘C로 요소 소스를 앱 클립보드(localStorage, 다른 보드·탭에서도)와 시스템 클립보드에 → 다른 보드 편집 중 ⌘V로 고른 요소 뒤(없으면 본문 끝)에 들여쓰기 맞춰 붙임. 우클릭에도 있음. script는 막음 | PASS | 단위 insert 3개; ux 스크립트: scr-32 '문의 보내기' → scr-02에 붙음; .out/ux/p3-60-paste.png | M |
 | 61 | J 추가 | 보드 검색·이동 | – | 왼쪽 패널 '보드 찾기(⌘K)': 제목·파일 이름으로 거르고 Enter로 첫 보드로 이동·선택, Esc로 비움 | PASS | ux 스크립트: '결제' 3개, Enter → scr-11 선택; .out/ux/p1-61-search.png | S |
-| 62 | J 추가 | Windows 경로·감시 | – | 코드상 `path.sep`으로 나누고 URL은 `/`로 맞춤, chokidar 사용. 실제 Windows 미시험 | PARTIAL | 코드: `watch.mjs`, `safeJoin` | S |
-| 63 | J 추가 | 보안(127.0.0.1, 경로 탈출) | – | 127.0.0.1에만 열림, `/screens/..%2F` 404, `/api/file?f=../` 400 | PASS | `J63.*` | S |
+| 62 | J 추가 | Windows 경로·감시 | – | 코드 점검: 경로는 path.join/relative 후 toPosix로 /, Windows에서 claude·codex는 shell(.cmd)·인자 따옴표·taskkill로 취소, which→where, rename은 EPERM·EBUSY 다시 시도, 스냅숏은 realpath 비교, 감시는 chokidar. 실제 Windows 기기는 없음 | PASS | 단위 winpath.test.mjs(path.win32 변환·따옴표) | S |
+| 63 | J 추가 | 보안(127.0.0.1, 경로 탈출) | – | 127.0.0.1에만 listen(index.mjs), /screens/..%2F 404, /api/file?f=../ 400, 자산 이름 정리·확장자 제한 | PASS | J63.* + 코드 server.listen(port, "127.0.0.1") | S |
 | 64 | J 추가 | 원자적 쓰기(임시 파일 → 교체) | – | HTML·board.json·comments.json을 같은 폴더 임시 파일(.dc-tmp-*)에 쓴 뒤 rename. 권한 유지, 실패하면 임시 파일 지움. 감시기는 .으로 시작하는 파일 무시 | PASS | 단위 테스트 fsutil 2개, e2e core: 편집 뒤 .dc-tmp 없음·임시 파일 rename에도 감시 반영 1초 안 | S |
 | 65 | J 추가 | 우클릭 메뉴(보드·요소·빈 캔버스) | 됨 | 보드(편집·Play·전체 화면·이동·이름·파일 이름·복제·맨 앞/뒤·삭제), 메모(복제·삭제), 빈 캔버스(여기에 보드·제목·메모, 모두 선택, 전체 보기, 100%, 실행 취소/다시), 편집 중 요소(글자 고치기·부모 선택·AI용 설명 복사·복제·삭제). 단축키 표시, 화살표·Enter·Esc | PASS | ux 스크립트: Esc로 닫힘 true; .out/ux/p1-65-menu-{board,canvas,element}.png — role=menu, 32px 행, 위험 항목 빨강 | M |
 | 66 | J 추가 | 캔버스 상태 기억(확대·위치·페이지·패널) | 됨 | 확대·위치·페이지·왼쪽 패널·미니맵을 localStorage(design-canvas:<제목>)에 기억, 다시 열면 되살림(launch 설정이 우선) | PASS | ux 스크립트: 다시 열기 전후 확대 같음(34%→34%) | S |
@@ -109,7 +109,7 @@
 | 68 | 도움말 | F6·Shift+F6 영역 이동, Tab·Space·Return 보드·레이어 탐색 | 키보드·화면 읽기 지원 | 없음 | MISSING | 코드 | M |
 | 69 | 도움말 | Option+화살표로 레이어 이동 | 됨 | 없음 | MISSING | 코드 | S |
 | 70 | 도움말 | ⌘\ 속성 패널 열고 닫기 | 됨 | 없음(패널 항상 보임) | MISSING | 코드 | S |
-| 71 | 도움말 | 색 선택기가 글자 명암 품질 표시 | 됨 | 없음 | PARTIAL | 스와치는 있으나 명암 표시 없음 | S |
+| 71 | 도움말 | 색 선택기가 글자 명암 품질 표시 | 됨 | 속성 패널 글자 색 아래 실제 배경과의 명암비와 등급(AAA·AA·큰 글자만·부족) | PASS | ux 스크립트: '명암 18.26:1 · AAA' | S |
 | 72 | 도움말 | 레이어 목록 화살표 탐색·펼치기 | 됨 | 클릭·펼치기는 되지만 키보드 탐색 없음 | PARTIAL | 코드: `Layers.tsx` | S |
 | 73 | 도움말 | 디자인 시스템 가져오기(/design-sync, GitHub·업로드) | 됨 | 레포 `docs/design`이 원본이라 가져오기 불필요 | N/A | – | – |
 | 74 | 도움말 | AI 리뷰(접근성·명암·위계)와 2~3개 변형 요청 | 채팅으로 | 캔버스 안에서 요청할 곳 없음(#49 채팅 필요) | MISSING | 코드 | M |

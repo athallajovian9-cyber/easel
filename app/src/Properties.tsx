@@ -2,6 +2,7 @@
 // 속성 패널: 값을 바꾸면 setStyle/setAttr를 보낸다. 토큰 색 7개는 스와치. PLAN.md 5장.
 import { useEffect, useState } from "react";
 
+import { contrast, offToken, themeColors, type Tokens } from "./ds";
 import type { Selection } from "./types";
 
 /** docs/design/README.md 디자인 토큰 색 */
@@ -85,6 +86,9 @@ export function Properties(props: {
   canWrap: boolean;
   onAlign: (dir: AlignDir) => void;
   onReplaceImage: (() => void) | null;
+  tokens: Tokens | null;
+  /** 글자 명암 계산용 실제 배경색 */
+  bg: string;
 }) {
   const s = props.selection;
   const attrNames = ATTRS[s.tag] ?? [];
@@ -99,6 +103,10 @@ export function Properties(props: {
           placeholder={s.styles[f.prop === "background" ? "background-color" : f.prop] ?? ""}
           options={f.options}
           color={f.color}
+          swatches={f.color ? (props.tokens ? themeColors(props.tokens) : TOKEN_COLORS) : undefined}
+          chips={chipsFor(f.prop, props.tokens)}
+          warn={offToken(f.prop, props.inline[f.prop] ?? (f.prop === "background" ? props.inline["background-color"] ?? "" : ""), props.tokens)}
+          ratio={f.prop === "color" ? contrast(props.inline.color || s.styles.color || "", props.bg) : null}
           onCommit={(v) => props.onStyle(f.prop, v)}
         />
       ))}
@@ -143,7 +151,26 @@ export function Properties(props: {
   );
 }
 
-function Field(p: { label: string; value: string; placeholder: string; options?: string[]; color?: boolean; onCommit: (v: string) => void }) {
+function chipsFor(prop: string, t: Tokens | null): string[] | undefined {
+  if (!t) return undefined;
+  if (prop === "font-size") return t.fontSizes.map((n) => `${n}px`);
+  if (prop === "border-radius") return t.radii.map((n) => `${n}px`);
+  if (prop === "gap" || prop === "padding") return t.spacing.filter((n) => n && n <= 24).map((n) => `${n}px`);
+  return undefined;
+}
+
+function Field(p: {
+  label: string;
+  value: string;
+  placeholder: string;
+  options?: string[];
+  color?: boolean;
+  swatches?: { name: string; value: string }[];
+  chips?: string[];
+  warn?: string | null;
+  ratio?: number | null;
+  onCommit: (v: string) => void;
+}) {
   const [v, setV] = useState(p.value);
   useEffect(() => setV(p.value), [p.value]);
   const commit = (next = v) => {
@@ -151,7 +178,14 @@ function Field(p: { label: string; value: string; placeholder: string; options?:
   };
   return (
     <label className="field">
-      <span>{p.label}</span>
+      <span>
+        {p.label}
+        {p.warn && (
+          <span className="tok-warn" title={p.warn} aria-label={`토큰 밖: ${p.warn}`}>
+            {" "}⚠
+          </span>
+        )}
+      </span>
       {p.options ? (
         <select
           value={v}
@@ -182,9 +216,31 @@ function Field(p: { label: string; value: string; placeholder: string; options?:
           }}
         />
       )}
+      {p.ratio != null && (
+        <span className={`ratio ${p.ratio >= 4.5 ? "ok" : p.ratio >= 3 ? "mid" : "bad"}`} title="바탕과의 명암비(본문 4.5 이상, 큰 글자 3 이상)">
+          명암 {p.ratio.toFixed(2)}:1 · {p.ratio >= 7 ? "AAA" : p.ratio >= 4.5 ? "AA" : p.ratio >= 3 ? "큰 글자만" : "부족"}
+        </span>
+      )}
+      {p.chips && (
+        <span className="chips-row">
+          {p.chips.map((c) => (
+            <button
+              key={c}
+              className={`tchip ${v === c ? "on" : ""}`}
+              onClick={(e) => {
+                e.preventDefault();
+                setV(c);
+                commit(c);
+              }}
+            >
+              {c.replace("px", "")}
+            </button>
+          ))}
+        </span>
+      )}
       {p.color && (
         <span className="swatches">
-          {TOKEN_COLORS.map((c) => (
+          {(p.swatches ?? TOKEN_COLORS).map((c) => (
             <button
               key={c.value}
               className={`swatch ${v.toUpperCase() === c.value ? "on" : ""}`}

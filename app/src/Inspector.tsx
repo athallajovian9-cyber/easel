@@ -6,7 +6,8 @@ import { api } from "./api";
 import { describe } from "./editor";
 import type { Selection } from "./types";
 
-export type Comment = { id: string; file: string; path: string; text: string; author: string; createdAt: string; resolved: boolean };
+export type Reply = { id: string; author: string; text: string; createdAt: string };
+export type Comment = { id: string; file: string; path: string; text: string; author: string; createdAt: string; resolved: boolean; replies?: Reply[] };
 
 export function Inspector(props: {
   file: string | null;
@@ -17,12 +18,23 @@ export function Inspector(props: {
   comments: Comment[];
   onSelectPath: (path: string) => void;
   onAskAI?: (c: Comment) => void;
+  author: string;
+  onAuthor: () => void;
   children?: ReactNode;
 }) {
   const [text, setText] = useState("");
   const [shot, setShot] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [replyTo, setReplyTo] = useState<string | null>(null);
+  const [reply, setReply] = useState("");
+  const sendReply = async (id: string, resolve = false) => {
+    if (!reply.trim()) return;
+    await api.post("/api/comments", { action: "reply", id, text: reply, author: props.author, resolve });
+    setReply("");
+    setReplyTo(null);
+  };
+  const when = (d: string) => new Date(d).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
   const sel = props.selection;
   const list = props.comments.filter((c) => !props.file || c.file === props.file);
 
@@ -46,7 +58,7 @@ export function Inspector(props: {
   };
   const addComment = async () => {
     if (!props.file || !text.trim()) return;
-    await api.post("/api/comments", { file: props.file, path: sel?.file === props.file ? sel.path : "", text, author: "Hyun" });
+    await api.post("/api/comments", { file: props.file, path: sel?.file === props.file ? sel.path : "", text, author: props.author });
     setText("");
   };
 
@@ -104,9 +116,14 @@ export function Inspector(props: {
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void addComment();
               }}
             />
-            <button onClick={addComment} disabled={!text.trim()}>
-              댓글 달기
-            </button>
+            <div className="row">
+              <button onClick={addComment} disabled={!text.trim()}>
+                댓글 달기
+              </button>
+              <button className="link" onClick={props.onAuthor} title="댓글 작성자 이름 바꾸기">
+                작성자: {props.author}
+              </button>
+            </div>
             <ul className="comments">
               {list.map((c) => (
                 <li key={c.id} className={c.resolved ? "resolved" : ""}>
@@ -120,7 +137,49 @@ export function Inspector(props: {
                     <span className="muted">{new Date(c.createdAt).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
                   </div>
                   <div>{c.text}</div>
+                  {(c.replies ?? []).length > 0 && (
+                    <ul className="replies">
+                      {c.replies!.map((r) => (
+                        <li key={r.id}>
+                          <div className="c-head">
+                            <strong>{r.author}</strong>
+                            <span className="muted">{when(r.createdAt)}</span>
+                          </div>
+                          <div>{r.text}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {replyTo === c.id && (
+                    <div className="reply-box">
+                      <textarea
+                        autoFocus
+                        value={reply}
+                        placeholder={`${props.author}(으)로 답글 (⌘Enter)`}
+                        aria-label="답글"
+                        onChange={(e) => setReply(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.nativeEvent.isComposing) return;
+                          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void sendReply(c.id);
+                          if (e.key === "Escape") setReplyTo(null);
+                        }}
+                      />
+                      <div className="row">
+                        <button onClick={() => void sendReply(c.id)} disabled={!reply.trim()}>
+                          답글
+                        </button>
+                        <button onClick={() => void sendReply(c.id, true)} disabled={!reply.trim()}>
+                          답하고 해결
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   <div className="row">
+                    {replyTo !== c.id && (
+                      <button className="link" onClick={() => setReplyTo(c.id)}>
+                        답글
+                      </button>
+                    )}
                     <button className="link" onClick={() => api.post("/api/comments", { action: "resolve", id: c.id, resolved: !c.resolved })}>
                       {c.resolved ? "다시 열기" : "해결"}
                     </button>
