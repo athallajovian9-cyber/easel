@@ -12,9 +12,24 @@ export async function writeAtomic(file, text) {
     // 원래 파일의 권한을 지킨다
     const st = await fs.stat(file).catch(() => null);
     if (st) await fs.chmod(tmp, st.mode & 0o777);
-    await fs.rename(tmp, file);
+    await renameRetry(tmp, file);
   } catch (e) {
     await fs.rm(tmp, { force: true }).catch(() => {});
     throw e;
   }
 }
+
+/** Windows에서는 감시기·백신이 파일을 잠깐 잡고 있어 rename이 EPERM·EBUSY로 실패할 수 있다 → 조금 기다렸다 다시 */
+async function renameRetry(from, to, tries = 6) {
+  for (let i = 0; ; i++) {
+    try {
+      return await fs.rename(from, to);
+    } catch (e) {
+      if (i >= tries - 1 || !["EPERM", "EBUSY", "EACCES"].includes(e.code)) throw e;
+      await new Promise((r) => setTimeout(r, 30 * (i + 1)));
+    }
+  }
+}
+
+/** OS 경로(\\ 또는 /) → URL·board.json용 / 경로 */
+export const toPosix = (rel, sep = path.sep) => rel.split(sep).join("/");

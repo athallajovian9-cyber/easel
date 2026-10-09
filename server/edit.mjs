@@ -180,6 +180,7 @@ export function applyEdit(html, req) {
     return moveElement(h, req);
   }
   if (op === "insert") return insertElement(html, req);
+  if (op === "setTweaks") return setTweaks(html, req.values ?? {});
   if (op === "batch") {
     // 같은 요소에 여러 속성: 해시는 첫 연산만 확인한다
     if (!Array.isArray(req.ops) || !req.ops.length) throw new EditError(400, "ops가 필요해요");
@@ -293,4 +294,36 @@ function insertElement(html, { path, hash, position = "after", html: src }) {
     return splice(html, st.endOffset, st.endOffset, code);
   }
   return splice(html, range.end, range.end, (indent ? "\n" + indent : "") + reindent(indent));
+}
+
+/** <script type="application/json" id="board-tweaks">의 value만 바꾼다(키 순서·나머지 그대로) */
+export function findTweaks(html) {
+  const doc = parseHtml(html);
+  const stack = [doc];
+  while (stack.length) {
+    const n = stack.pop();
+    if (n.tagName === "script" && n.attrs?.some((a) => a.name === "id" && a.value === "board-tweaks")) return n;
+    for (const c of n.childNodes ?? []) stack.push(c);
+    if (n.content) stack.push(n.content);
+  }
+  return null;
+}
+function setTweaks(html, values) {
+  const node = findTweaks(html);
+  const text = node?.childNodes?.[0];
+  if (!node || !text?.sourceCodeLocation) throw new EditError(404, "board-tweaks가 없어요");
+  let data;
+  try {
+    data = JSON.parse(text.value);
+  } catch {
+    throw new EditError(422, "board-tweaks JSON을 읽을 수 없어요");
+  }
+  for (const [k, v] of Object.entries(values)) if (data[k] && typeof data[k] === "object") data[k].value = v;
+  const { startOffset, endOffset } = text.sourceCodeLocation;
+  const orig = html.slice(startOffset, endOffset);
+  const lead = orig.match(/^\s*/)[0];
+  const trail = orig.match(/\s*$/)[0];
+  const ind = (lead.match(/\n([ \t]*)$/) ?? [, ""])[1];
+  const body = JSON.stringify(data, null, 2).replace(/\n/g, "\n" + ind);
+  return splice(html, startOffset, endOffset, lead + body + trail);
 }

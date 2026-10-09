@@ -64,6 +64,9 @@ export function parseLine(agent, line, st) {
   return out;
 }
 
+/** Windows shell 인자: 큰따옴표로 감싸고 안의 큰따옴표는 두 번 */
+export const winQuote = (a) => (/^[\w./:=-]+$/.test(a) ? a : `"${String(a).replace(/"/g, '""')}"`);
+
 /** 저장소 뿌리: docs/design이면 두 단계 위, 아니면(시험용 임시 폴더) 그 폴더 */
 const rootOf = (dir) => (dir.endsWith(path.join("docs", "design")) ? path.resolve(dir, "../..") : dir);
 
@@ -166,7 +169,9 @@ export function chatRoutes({ getSelection } = {}) {
           const id = `r${Date.now().toString(36)}`;
           let proc;
           try {
-            proc = spawn(cmd, args, { cwd: rootOf(ctx.dir), stdio: ["ignore", "pipe", "pipe"], detached: true, env: { ...process.env, DESIGN_CANVAS_PORT: String(req.socket.localPort) } });
+            // Windows: claude·codex는 .cmd 껍데기라 shell이 필요하고, 프로세스 묶음 종료가 없어 detached를 쓰지 않는다
+            const win = process.platform === "win32";
+            proc = spawn(cmd, win ? args.map(winQuote) : args, { cwd: rootOf(ctx.dir), stdio: ["ignore", "pipe", "pipe"], detached: !win, shell: win, windowsHide: true, env: { ...process.env, DESIGN_CANVAS_PORT: String(req.socket.localPort) } });
           } catch (e) {
             return sendJson(res, 500, { error: `${cmd}를 실행하지 못했어요: ${e.message}` });
           }
@@ -214,7 +219,8 @@ export function chatRoutes({ getSelection } = {}) {
           if (!run || run.status !== "running") return sendJson(res, 404, { error: "실행 중이 아니에요" });
           run.cancelled = true;
           try {
-            process.kill(-run.proc.pid, "SIGTERM"); // 프로세스 묶음째
+            if (process.platform === "win32") spawn("taskkill", ["/pid", String(run.proc.pid), "/T", "/F"], { windowsHide: true });
+            else process.kill(-run.proc.pid, "SIGTERM"); // 프로세스 묶음째
           } catch {
             run.proc.kill("SIGTERM");
           }
@@ -226,7 +232,7 @@ export function chatRoutes({ getSelection } = {}) {
         "GET",
         "/api/agents",
         async (req, res) => {
-          const which = (c) => new Promise((r) => spawn("which", [c]).on("close", (code) => r(code === 0)).on("error", () => r(false)));
+          const which = (c) => new Promise((r) => spawn(process.platform === "win32" ? "where" : "which", [c], { windowsHide: true }).on("close", (code) => r(code === 0)).on("error", () => r(false)));
           const fake = process.env.DESIGN_CANVAS_AGENT_CMD ? Object.keys(JSON.parse(process.env.DESIGN_CANVAS_AGENT_CMD)) : [];
           sendJson(res, 200, { agents: [{ id: "claude", label: "Claude Code", ok: fake.includes("claude") || (await which("claude")) }, { id: "codex", label: "Codex", ok: fake.includes("codex") || (await which("codex")) }] });
         },

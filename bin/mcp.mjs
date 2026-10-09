@@ -215,4 +215,31 @@ server.registerTool(
   async (args) => ok(await callJson("POST", "/api/pages", args)),
 );
 
+server.registerTool(
+  "get_tokens",
+  { description: "디자인 토큰(테마별 색, 글자 크기·굵기·모서리·간격, 글꼴, 최소 누르는 영역). 화면을 만들거나 고칠 때 이 값만 쓴다", inputSchema: {} },
+  async () => ok(await callJson("GET", "/api/tokens")),
+);
+
+server.registerTool(
+  "check_tokens",
+  {
+    description: "화면 HTML에서 토큰 밖 값(색·글자 크기·굵기·모서리·4 단위 아닌 간격)을 찾는다. 고친 뒤 결과 확인에 쓴다. file을 빼면 전체",
+    inputSchema: { file: z.string().optional() },
+  },
+  async ({ file }) => ok(await callJson("GET", `/api/lint${file ? `?f=${encodeURIComponent(file)}` : ""}`)),
+);
+
+server.registerTool(
+  "reply_comment",
+  { description: "댓글에 답글(resolve=true면 답하고 해결 처리)", inputSchema: { id: z.string(), text: z.string(), resolve: z.boolean().optional(), author: z.string().optional() } },
+  async (args) => ok(await callJson("POST", "/api/comments", { action: "reply", ...args, author: args.author ?? "AI" })),
+);
+
+server.registerTool(
+  "save_snapshot",
+  { description: "디자인 폴더만 git 커밋해 스냅숏을 남긴다(버전 저장). 사람이 '저장해 줘'라고 할 때만", inputSchema: { message: z.string().optional() } },
+  async ({ message }) => ok(await callJson("POST", "/api/snapshot", { message })),
+);
+
 await server.connect(new StdioServerTransport());

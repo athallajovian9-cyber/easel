@@ -6,6 +6,8 @@ import path from "node:path";
 import { TOOL_ROOT } from "./args.mjs";
 import { boardRoutes } from "./boards.mjs";
 import { chatRoutes } from "./chat.mjs";
+import { tokenRoutes } from "./tokens.mjs";
+import { snapshotRoutes } from "./snapshot.mjs";
 import { applyEdit, EditError } from "./edit.mjs";
 import { writeAtomic } from "./fsutil.mjs";
 import { inspect, outline } from "./html.mjs";
@@ -121,6 +123,8 @@ export const extraRoutes = [
   ]),
   ...boardRoutes(),
   ...chat.routes,
+  ...tokenRoutes(),
+  ...snapshotRoutes(),
   // 자산 보관함: docs/design/assets/ 목록과 올리기(이미지·폰트). 화면에서는 ../assets/<이름>으로 쓴다
   [
     "GET",
@@ -241,6 +245,17 @@ export const extraRoutes = [
     async (req, res, url, ctx) => {
       const b = await readBody(req);
       const list = await readComments(ctx);
+      if (b.action === "reply") {
+        const c = list.find((x) => x.id === b.id);
+        if (!c) return sendJson(res, 404, { error: "댓글이 없어요" });
+        if (!String(b.text ?? "").trim()) return sendJson(res, 400, { error: "text가 필요해요" });
+        const r = { id: `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, author: b.author ?? process.env.USER ?? "unknown", text: String(b.text).trim(), createdAt: new Date().toISOString() };
+        c.replies = [...(c.replies ?? []), r];
+        if (b.resolve) c.resolved = true;
+        await writeComments(ctx, list);
+        ctx.broadcast({ type: "comments-changed" });
+        return sendJson(res, 200, { comment: c, reply: r });
+      }
       if (b.action === "resolve") {
         const c = list.find((x) => x.id === b.id);
         if (!c) return sendJson(res, 404, { error: "댓글이 없어요" });

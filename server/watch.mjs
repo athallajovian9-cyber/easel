@@ -6,6 +6,7 @@ import path from "node:path";
 import chokidar from "chokidar";
 
 import { createDeps } from "./deps.mjs";
+import { toPosix } from "./fsutil.mjs";
 
 export function watchDesign({ dir, store, broadcast }) {
   const screensDir = store.screensDir;
@@ -47,7 +48,7 @@ export function watchDesign({ dir, store, broadcast }) {
       return;
     }
     if (!abs.endsWith(".html")) return;
-    const file = path.relative(screensDir, abs).split(path.sep).join("/");
+    const file = toPosix(path.relative(screensDir, abs));
     const kind = event === "add" ? "add" : event === "unlink" ? "unlink" : "change";
     if (kind === "unlink") deps.remove(file);
     else await deps.update(file);
