@@ -215,9 +215,20 @@ export function ChatPanel(p: {
               선택한 보드·요소와 화면에 보이는 보드를 맥락으로 붙여 {AGENT_LABEL[agent] ?? agent}에게 보내요. 에이전트가 원본 HTML을 직접 고치고, 캔버스는 바로 다시 그려요.
             </p>
             <div className="chat-suggest">
-              {["선택한 버튼 문구를 더 짧게", "이 화면을 다크 모드로 한 안", "빈 상태 화면 하나 새로 만들어 줘"].map((s) => (
-                <button key={s} onClick={() => p.setDraft(s)}>
-                  {s}
+              {[
+                { label: "AI 리뷰: 접근성·명암·위계", text: "고른 화면을 리뷰해 줘: 접근성(누르는 영역 48·명암 4.5·라벨), 정보 위계, 토큰(get_tokens·check_tokens) 위반. 우선순위대로 제안만 하고 고치지는 마.", n: 1 },
+                { label: "이 화면 변형 3가지", text: "고른 화면을 서로 다른 방향으로 3가지 안을 만들어 줘(배치·위계·강조 방식이 각각 다르게).", n: 3 },
+                { label: "선택한 버튼 문구를 더 짧게", text: "선택한 버튼 문구를 더 짧게", n: 1 },
+                { label: "빈 상태 화면 하나 새로 만들어 줘", text: "빈 상태 화면 하나 새로 만들어 줘", n: 1 },
+              ].map((x) => (
+                <button
+                  key={x.label}
+                  onClick={() => {
+                    p.setDraft(x.text);
+                    setVariants(x.n);
+                  }}
+                >
+                  {x.label}
                 </button>
               ))}
             </div>

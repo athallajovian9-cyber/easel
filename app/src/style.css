@@ -431,3 +431,12 @@ button.danger { color: var(--warn); }
 .replies { list-style: none; margin: 4px 0 0 12px; padding: 0 0 0 8px; border-left: 2px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
 .reply-box { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 .theme-pick select { height: 32px; max-width: 160px; }
+.board-placeholder { position: relative; overflow: hidden; }
+.board-placeholder span { position: relative; }
+.board-thumb { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top; opacity: 0; transition: opacity 160ms; }
+.board-thumb.loaded { opacity: 1; }
+.board-thumb.loaded + span { display: none; }
+.board.playing .board-frame { box-shadow: 0 0 0 4px var(--ok); }
+.playing-badge { position: absolute; right: 8px; top: 8px; transform-origin: 100% 0; background: var(--ok); color: #fff; font-size: 12px; font-weight: 700; padding: 4px 8px; border-radius: 12px; pointer-events: none; }
+.layer-tree:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-sm); }
+.layer-tree:focus .layer.focus { box-shadow: inset 0 0 0 1px var(--accent); }

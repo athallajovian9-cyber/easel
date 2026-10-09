@@ -152,6 +152,23 @@ export function TokenPanel({ tokens, onSave }: { tokens: Tokens; onSave: (t: Tok
   );
   return (
     <div className="tokens">
+      <label className="upload small">
+        <Icon name="plus" size={14} /> 토큰 가져오기(tokens.json·Figma 변수 JSON)
+        <input
+          type="file"
+          hidden
+          accept=".json,application/json"
+          onChange={async (e) => {
+            const f = e.target.files?.[0];
+            if (!f) return;
+            try {
+              setT(importTokens(JSON.parse(await f.text()), t));
+            } catch (err) {
+              alert(`가져오지 못했어요: ${(err as Error).message}`);
+            }
+          }}
+        />
+      </label>
       <div className="sec-head">
         <span>테마</span>
         <button
@@ -227,6 +244,24 @@ export function TokenPanel({ tokens, onSave }: { tokens: Tokens; onSave: (t: Tok
       </p>
     </div>
   );
+}
+
+/** 가져오기: 우리 tokens.json 형식, 또는 {이름: "#hex"}·{color:{이름:{value}}} 같은 단순한 변수 JSON */
+export function importTokens(j: unknown, base: Tokens): Tokens {
+  const o = j as Record<string, unknown>;
+  if (o && typeof o === "object" && o.themes && typeof o.themes === "object") return { ...base, ...(o as Partial<Tokens>), active: (o.active as string) ?? Object.keys(o.themes as object)[0] } as Tokens;
+  const colors: Record<string, string> = {};
+  const walk = (x: unknown, name: string) => {
+    if (typeof x === "string" && /^#|^rgb/i.test(x)) colors[name] = x.toUpperCase();
+    else if (x && typeof x === "object") {
+      const v = (x as Record<string, unknown>).value ?? (x as Record<string, unknown>).$value;
+      if (typeof v === "string") walk(v, name);
+      else for (const [k, c] of Object.entries(x)) walk(c, name ? `${name} ${k}` : k);
+    }
+  };
+  walk(j, "");
+  if (!Object.keys(colors).length) throw new Error("색 값을 찾지 못했어요");
+  return { ...base, themes: { ...base.themes, 가져온: colors }, active: "가져온" };
 }
 
 /* ---------- 오른쪽: 검사 결과 목록(토큰·접근성) ---------- */

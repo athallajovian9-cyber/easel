@@ -66,6 +66,8 @@ export function App() {
   const [selectedNote, setSelectedNote] = useState<string | null>(null);
   const [editFile, setEditFile] = useState<string | null>(null);
   const [playFile, setPlayFile] = useState<string | null>(null);
+  const [inlinePlay, setInlinePlay] = useState<string | null>(null);
+  const [announce, setAnnounce] = useState("");
   const [focusFile, setFocusFile] = useState<string | null>(null);
   const [leftOpen, setLeftOpen] = useState(true);
   const [minimapOpen, setMinimapOpen] = useState(true);
@@ -244,11 +246,11 @@ export function App() {
   /** 더블클릭: 글자 하나만 있는 요소를 그 자리에서 고친다. 한글 조합 중 Enter는 무시 */
   const onTextEdit = useCallback(
     (el: HTMLElement, path: string) => {
-      if (el.children.length) {
-        editRef.current?.setError("글자 하나만 있는 요소만 바로 고칠 수 있어요");
+      if (Array.from(el.children).some((c) => c.tagName !== "BR")) {
+        editRef.current?.setError("글자(와 줄바꿈)만 있는 요소만 바로 고칠 수 있어요");
         return;
       }
-      const before = el.textContent ?? "";
+      const before = el.innerText ?? "";
       el.contentEditable = "true";
       el.focus();
       const doc = el.ownerDocument;
@@ -260,13 +262,13 @@ export function App() {
       const finish = async () => {
         el.removeEventListener("keydown", onKey);
         el.contentEditable = "false";
-        const text = el.textContent ?? "";
+        const text = (el.innerText ?? "").replace(/\n$/, "");
         if (cancelled || text === before) {
-          el.textContent = before;
+          if (cancelled) el.innerText = before;
           return;
         }
         const { hash } = await api.get<{ hash: string }>(`/api/element?f=${encodeURIComponent(editFile!)}&path=${encodeURIComponent(path)}`);
-        if (!(await doEdit({ op: "setText", path, hash, text }))) el.textContent = before;
+        if (!(await doEdit({ op: "setText", path, hash, text }))) el.innerText = before; // Shift+Enter 줄바꿈은 원본에 <br>로
       };
       const onKey = (e: KeyboardEvent) => {
         if (e.isComposing || e.keyCode === 229) return; // 조합 중 Enter는 글자 확정일 뿐
@@ -686,6 +688,38 @@ export function App() {
     return () => window.removeEventListener("paste", onPaste);
   });
 
+  /** 가져오기: HTML은 새 보드(파일 그대로), 이미지는 자산 + 이미지 도형 */
+  const importFiles = async (files: File[], at: { x: number; y: number }) => {
+    let x = Math.round(at.x);
+    const made: string[] = [];
+    for (const f of files) {
+      try {
+        if (/\.html?$/i.test(f.name)) {
+          const html = await f.text();
+          const m = html.match(/<meta[^>]+name=["']board-size["'][^>]+content=["'](\d+)x(\d+)/i);
+          const w = m ? Number(m[1]) : 390;
+          const h = m ? Number(m[2]) : 844;
+          const title = html.match(/<title>([^<]*)<\/title>/i)?.[1]?.trim() || f.name.replace(/\.html?$/i, "");
+          const file = f.name.toLowerCase().replace(/\.htm$/, ".html").replace(/[^a-z0-9._-]+/g, "-");
+          const r = await api.post<{ file: string }>("/api/boards/create", { file, html, title, x, y: Math.round(at.y), w, h, ...pageField() });
+          made.push(r.file);
+          x += w + 80;
+        } else if (f.type.startsWith("image/")) {
+          const [a] = await uploadAssets([f]);
+          addImageShape(a, { x, y: at.y });
+          x += 400;
+        } else toast({ tone: "error", text: `${f.name}: HTML이나 이미지만 가져올 수 있어요` });
+      } catch (e) {
+        toast({ tone: "error", text: `${f.name}: ${(e as Error).message}` });
+      }
+    }
+    if (made.length) {
+      await load();
+      setLocate(made);
+      toast({ tone: "ok", text: `보드 ${made.length}개를 가져왔어요`, action: undoAction });
+    }
+  };
+
   /* ---------- 페이지(서버 기록) ---------- */
   const pageApi = async (body: Record<string, unknown>, okText?: string) => {
     try {
@@ -745,7 +779,9 @@ export function App() {
     const many = files.length > 1;
     return [
       { label: editFile === file ? "편집 끝내기" : "편집", icon: "edit", shortcut: "E", disabled: many, run: () => setEditFile(editFile === file ? null : file) },
-      { label: "Play", icon: "play", disabled: many || !b?.is_interactive, run: () => setPlayFile(file) },
+      { label: inlinePlay === file ? "Play 멈추기" : "그 자리에서 Play", icon: "play", shortcut: "P", disabled: many || !b?.is_interactive, run: () => (inlinePlay === file ? stopInline() : setInlinePlay(file)) },
+      { label: "전체 화면 Play", icon: "play", disabled: many || !b?.is_interactive, run: () => setPlayFile(file) },
+      { label: "AI 리뷰 요청", icon: "comment", run: () => openChat("이 화면을 리뷰해 줘: 접근성(누르는 영역 48·명암 4.5·라벨), 정보 위계, 토큰(get_tokens·check_tokens) 위반을 짚고 고칠 점을 우선순위로. 고치지는 말고 제안만.", files) },
       { label: "전체 화면 보기", icon: "focus", shortcut: "F", disabled: many, run: () => setFocusFile(file) },
       { label: "AI에게 묻기", icon: "comment", shortcut: `${mod}J`, run: () => openChat(undefined, files) },
       ...(errors[file] || data?.missing.includes(file) ? [{ label: "AI에게 오류 고쳐 달라기", icon: "warn" as IconName, run: () => askFix([file]) }] : []),
@@ -834,6 +870,40 @@ export function App() {
     });
   };
 
+  /** 그 자리 Play 끝: 눌러서 다른 화면으로 갔으면 원래 화면으로 되돌린다 */
+  const stopInline = () => {
+    const f = inlinePlay;
+    setInlinePlay(null);
+    // 포커스가 iframe 안에 남으면 단축키가 앱에 오지 않는다
+    (document.activeElement as HTMLElement | null)?.blur?.();
+    const c = document.querySelector<HTMLElement>(".canvas");
+    if (c) {
+      c.tabIndex = -1;
+      c.focus({ preventScroll: true });
+    }
+    if (f) setReloadKeys((k) => ({ ...k, [f]: (k[f] ?? 0) + 1 }));
+  };
+  // 그 자리 Play 중에는 iframe 안에서 누른 Esc도 받는다(다른 화면으로 넘어가도)
+  useEffect(() => {
+    if (!inlinePlay) return;
+    const frame = frames.current.get(inlinePlay);
+    if (!frame) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && stopInlineRef.current();
+    let doc: Document | null = null;
+    const attach = () => {
+      doc?.removeEventListener("keydown", onKey, true);
+      doc = frame.contentDocument;
+      doc?.addEventListener("keydown", onKey, true);
+    };
+    attach();
+    frame.addEventListener("load", attach);
+    return () => {
+      frame.removeEventListener("load", attach);
+      doc?.removeEventListener("keydown", onKey, true);
+    };
+  }, [inlinePlay, frameTick]);
+  const stopInlineRef = useRef(() => {});
+  stopInlineRef.current = stopInline;
   /** ⌘\: 양쪽 패널 함께 숨기기·보이기 */
   const [rightOpen, setRightOpen] = useState(true);
   const toggleUi = () => {
@@ -945,6 +1015,14 @@ export function App() {
     if (cmd && k === "j") return run(() => (rightTab === "chat" ? setRightTab("inspect") : openChat()));
     if (cmd && k === "k") return run(() => { setLeftOpen(true); setTimeout(() => searchRef.current?.focus(), 0); });
     if (cmd && k === "a" && !editFile) return run(() => select(visibleBoards));
+    // 편집 중 ⌘A: 지금 고른 요소의 형제 모두(없으면 보드 맨 위 요소들)
+    if (cmd && k === "a" && editFile) {
+      const doc = frames.current.get(editFile)?.contentDocument;
+      const cur = edit.state.selection?.path;
+      const parentEl = doc && (cur ? elementAt(doc, cur)?.parentElement : doc.body.firstElementChild);
+      const kids = parentEl ? Array.from(parentEl.children).filter((c) => !/^(SCRIPT|STYLE)$/.test(c.tagName)).map((c) => pathOf(c)).filter((x): x is string => x != null) : [];
+      return run(() => kids.length && void edit.select(kids));
+    }
     if (cmd && k === "c" && editFile && edit.state.selection) return run(() => void copyElement());
     if (cmd && k === "v" && editFile) return run(() => void pasteElement());
     if (cmd && k === "d" && editFile && edit.state.selection) {
@@ -965,6 +1043,7 @@ export function App() {
     if (e.shiftKey && e.code === "Digit1") return run(fitAll);
     if (e.shiftKey && e.code === "Digit2") return run(() => goTo(selected));
     if (e.key === "Escape") {
+      if (inlinePlay) return run(() => stopInline());
       if (editFile) return run(() => setEditFile(null));
       if (tool !== "select") return run(() => setTool("select"));
       setSelected([]);
@@ -973,6 +1052,28 @@ export function App() {
       return;
     }
     if (e.key === "F6") return run(() => cycleFocus(e.shiftKey));
+    // Tab: 캔버스에 포커스가 있으면 다음·이전 보드, Enter: 편집(편집 중엔 첫 자식, Shift는 부모)
+    const ae = document.activeElement as HTMLElement | null;
+    const inCanvas = !ae || ae === document.body || !!ae.closest?.(".canvas") || ae.tagName === "IFRAME";
+    if (e.key === "Tab" && inCanvas && !editFile && visibleBoards.length) {
+      const i = selected.length ? visibleBoards.indexOf(selected[selected.length - 1]) : -1;
+      const n = visibleBoards[(i + (e.shiftKey ? -1 : 1) + visibleBoards.length) % visibleBoards.length];
+      return run(() => {
+        select([n]);
+        goTo([n]);
+        setAnnounce(`${board.boards[n]?.title ?? n} 선택, ${visibleBoards.indexOf(n) + 1}/${visibleBoards.length}. Enter로 편집`);
+      });
+    }
+    if (e.key === "Enter" && !editFile && selected.length === 1 && inCanvas) return run(() => setEditFile(selected[0]));
+    if (e.key === "Enter" && editFile && edit.state.selection) {
+      const doc = frames.current.get(editFile)?.contentDocument;
+      const el = doc && elementAt(doc, edit.state.selection.path);
+      const t = e.shiftKey ? el?.parentElement : el?.firstElementChild;
+      const tp = t && t !== doc?.body ? pathOf(t) : null;
+      if (tp != null) return run(() => void edit.select([tp]));
+      return;
+    }
+    if (k === "p" && !editFile && !cmd && selected.length === 1 && board.boards[selected[0]]?.is_interactive) return run(() => (inlinePlay === selected[0] ? stopInline() : setInlinePlay(selected[0])));
     if ((e.key === "Delete" || e.key === "Backspace") && selectedShape && !editFile) return run(() => deleteShape(selectedShape));
     if (e.key === "Delete" || e.key === "Backspace") {
       if (editFile && edit.state.selection) {
@@ -1194,6 +1295,23 @@ export function App() {
                   ...erroredFiles.slice(0, 12).map((f) => ({ label: `${board.boards[f]?.title ?? f} — ${(errors[f]?.[0]?.message ?? "파일이 없어요").slice(0, 40)}`, icon: "warn" as IconName, run: () => { select([f]); goTo([f]); } })),
                   "sep" as const,
                   { label: "AI에게 모두 고쳐 달라기", icon: "comment" as IconName, run: () => askFix(erroredFiles) },
+                  ...(data.missing.length
+                    ? [
+                        {
+                          label: `파일 없는 보드 ${data.missing.length}개 정리`,
+                          icon: "trash" as IconName,
+                          danger: true,
+                          run: () => {
+                            update((b) => {
+                              const boards = { ...b.boards };
+                              for (const f of data.missing) delete boards[f];
+                              return { ...b, boards, order: b.order.filter((f) => !data.missing.includes(f)) };
+                            }, "파일 없는 보드 정리");
+                            toast({ text: `보드 ${data.missing.length}개를 정리했어요`, action: undoAction });
+                          },
+                        },
+                      ]
+                    : []),
                 ],
               });
             }}
@@ -1272,7 +1390,20 @@ export function App() {
           />
           )
         )}
-        <div className="canvas-wrap">
+        <div
+          className="canvas-wrap"
+          onDragOver={(e) => {
+            if (Array.from(e.dataTransfer.items).some((i) => i.kind === "file")) e.preventDefault();
+          }}
+          onDrop={(e) => {
+            const files = Array.from(e.dataTransfer.files);
+            if (!files.length) return;
+            e.preventDefault();
+            const r = e.currentTarget.getBoundingClientRect();
+            const at = { x: (e.clientX - r.left - view.x) / view.zoom, y: (e.clientY - r.top - view.y) / view.zoom };
+            void importFiles(files, at);
+          }}
+        >
           <Canvas
             board={board}
             files={data.files}
@@ -1300,7 +1431,8 @@ export function App() {
             }
             onMoveNote={(id, patch, done) => update((b) => ({ ...b, notes: { ...b.notes, [id]: { ...b.notes[id], ...patch } } }), done ? ("text" in patch ? "메모 고치기" : "메모 옮기기") : undefined)}
             onDeleteNote={deleteNote}
-            onPlay={setPlayFile}
+            onPlay={(f) => (inlinePlay === f ? stopInline() : setInlinePlay(f))}
+            playing={inlinePlay}
             onEdit={(f) => {
               setEditFile(f);
               if (f) setSelected([f]);
@@ -1569,6 +1701,9 @@ export function App() {
         />
       )}
       <AssetPicker open={!!picker} version={assetsVersion} onClose={() => setPicker(null)} onPick={(a) => picker?.(a)} onError={(m) => toast({ tone: "error", text: m })} />
+      <div className="sr-only" role="status" aria-live="polite">
+        {announce}
+      </div>
       <ContextMenu menu={menu} onClose={() => setMenu(null)} />
       <Dialog state={ask.state} onClose={ask.close} />
     </div>

@@ -14,6 +14,7 @@ export function Layers(props: { file: string; version: number; selected: string[
   const [open, setOpen] = useState<Record<string, boolean>>({ "0": true });
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
+  const [focus, setFocus] = useState<string | null>(null);
 
   useEffect(() => {
     api
@@ -41,13 +42,56 @@ export function Layers(props: { file: string; version: number; selected: string[
     props.onMove(dragging, toParent, index);
   };
 
+  // 화살표 탐색: 보이는 줄 순서
+  const visible: Node[] = [];
+  const byPath = new Map<string, Node>();
+  const flat = (ns: Node[]) => {
+    for (const n of ns) {
+      visible.push(n);
+      byPath.set(n.path, n);
+      if (n.children.length && open[n.path]) flat(n.children);
+    }
+  };
+  flat(tree);
+  const cur = focus ?? props.selected[props.selected.length - 1] ?? visible[0]?.path ?? null;
+  const go = (p: string | undefined | null) => {
+    if (p == null || !byPath.has(p)) return;
+    setFocus(p);
+    props.onSelect(p, false);
+  };
+  const onKey = (e: React.KeyboardEvent) => {
+    if (!cur) return;
+    const i = visible.findIndex((n) => n.path === cur);
+    const n = byPath.get(cur);
+    const keys: Record<string, () => void> = {
+      ArrowDown: () => go(visible[i + 1]?.path),
+      ArrowUp: () => go(visible[i - 1]?.path),
+      ArrowRight: () => (n?.children.length ? (open[cur] ? go(n.children[0].path) : setOpen((o) => ({ ...o, [cur]: true }))) : undefined),
+      ArrowLeft: () => (n?.children.length && open[cur] ? setOpen((o) => ({ ...o, [cur]: false })) : go(cur.includes("/") ? parentOf(cur) : null)),
+      Home: () => go(visible[0]?.path),
+      End: () => go(visible[visible.length - 1]?.path),
+      Enter: () => go(cur),
+      " ": () => go(cur),
+    };
+    const f = keys[e.key];
+    if (f) {
+      e.preventDefault();
+      e.stopPropagation();
+      f();
+    }
+  };
+
   const row = (n: Node, depth: number) => {
     const has = n.children.length > 0;
     const isOpen = open[n.path];
     return (
       <li key={n.path}>
         <div
-          className={`layer ${props.selected.includes(n.path) ? "on" : ""} ${over === n.path ? "over" : ""}`}
+          role="treeitem"
+          aria-selected={props.selected.includes(n.path)}
+          aria-expanded={has ? !!isOpen : undefined}
+          aria-level={depth + 1}
+          className={`layer ${props.selected.includes(n.path) ? "on" : ""} ${over === n.path ? "over" : ""} ${cur === n.path ? "focus" : ""}`}
           style={{ paddingLeft: 4 + depth * 12 }}
           draggable
           onDragStart={(e) => {
@@ -69,10 +113,15 @@ export function Layers(props: { file: string; version: number; selected: string[
             drop(n.path);
             setOver(null);
           }}
-          onClick={(e) => props.onSelect(n.path, e.shiftKey)}
+          onClick={(e) => {
+            setFocus(n.path);
+            props.onSelect(n.path, e.shiftKey);
+          }}
         >
           <button
             className="twisty"
+            tabIndex={-1}
+            aria-label={isOpen ? "접기" : "펼치기"}
             style={{ visibility: has ? "visible" : "hidden" }}
             onClick={(e) => {
               e.stopPropagation();
@@ -93,8 +142,10 @@ export function Layers(props: { file: string; version: number; selected: string[
   return (
     <section className="layers">
       <h3>레이어</h3>
-      <p className="muted small">끌어서 다른 항목 위에 놓으면 그 앞으로 옮겨요. Shift+클릭으로 여러 개(감싸기용).</p>
-      <ul className="layer-tree">{tree.map((n) => row(n, 0))}</ul>
+      <p className="muted small">끌어서 다른 항목 위에 놓으면 그 앞으로 옮겨요. Shift+클릭으로 여러 개(감싸기용). 목록을 누른 뒤 ↑↓ 이동, ←→ 접기·펼치기.</p>
+      <ul className="layer-tree" role="tree" aria-label="레이어" tabIndex={0} onKeyDown={onKey}>
+        {tree.map((n) => row(n, 0))}
+      </ul>
     </section>
   );
 }

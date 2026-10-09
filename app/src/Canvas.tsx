@@ -30,6 +30,8 @@ type Props = {
   selected: string[];
   selectedNote: string | null;
   editFile: string | null;
+  /** 그 자리에서 Play 중인 보드(iframe을 눌러 볼 수 있음) */
+  playing?: string | null;
   reloadKeys: Record<string, number>;
   onSelect: (files: string[], mode: "replace" | "toggle" | "add") => void;
   onSelectNote: (id: string | null) => void;
@@ -276,6 +278,8 @@ export function Canvas(p: Props) {
               selected={selected}
               single={selected && p.selected.length === 1}
               editing={p.editFile === f}
+              playing={p.playing === f}
+              near={inView(b)}
               reloadKey={p.reloadKeys[f] ?? 0}
               onPointerDownLabel={(e) => {
                 if (e.button !== 0) return;
@@ -328,6 +332,8 @@ function BoardView(props: {
   selected: boolean;
   single: boolean;
   editing: boolean;
+  playing?: boolean;
+  near?: boolean;
   reloadKey: number;
   onPointerDownLabel: (e: RPointerEvent) => void;
   onPointerMoveLabel: (e: RPointerEvent) => void;
@@ -352,9 +358,11 @@ function BoardView(props: {
   const stop = (e: RPointerEvent) => e.stopPropagation();
   return (
     <div
-      className={`board ${props.selected ? "selected" : ""} ${props.editing ? "editing" : ""} ${b.frameless ? "frameless" : ""} ${b.is_interactive ? "interactive" : ""}`}
+      className={`board ${props.selected ? "selected" : ""} ${props.editing ? "editing" : ""} ${props.playing ? "playing" : ""} ${b.frameless ? "frameless" : ""} ${b.is_interactive ? "interactive" : ""}`}
       style={{ left: b.x, top: b.y, width: b.w, height: b.h }}
       data-file={props.file}
+      role="group"
+      aria-label={`보드 ${title}${props.selected ? " (선택됨)" : ""}${props.editing ? " 편집 중" : ""}${props.playing ? " 실행 중" : ""}`}
     >
       <div
         className="board-label"
@@ -399,22 +407,24 @@ function BoardView(props: {
           }
         }}
         onPointerDown={(e) => {
-          if (e.button === 0 && !props.editing) {
+          if (e.button === 0 && !props.editing && !props.playing) {
             e.stopPropagation();
             props.onSelect(e);
           }
         }}
-        onContextMenu={(e) => !props.editing && ctx(e)}
+        onContextMenu={(e) => !props.editing && !props.playing && ctx(e)}
       >
         {!props.exists ? (
           <div className="board-missing">파일 없음 · {props.file}</div>
         ) : props.live ? (
-          <LiveFrame reloadKey={props.reloadKey} iframeRef={props.iframeRef} src={`/screens/${props.file}`} title={title} editing={props.editing} />
+          <LiveFrame reloadKey={props.reloadKey} iframeRef={props.iframeRef} src={`/screens/${props.file}`} title={title} editing={props.editing || !!props.playing} />
         ) : (
           <div className="board-placeholder" style={{ fontSize: Math.min(64, 14 / zoom) }}>
-            {title}
+            {props.near && <Thumb file={props.file} v={props.reloadKey} />}
+            <span>{title}</span>
           </div>
         )}
+        {props.playing && <div className="playing-badge" style={{ transform: `scale(${1 / Math.max(zoom, 0.25)})` }}>▶ 실행 중 · Esc</div>}
         {props.overlay}
       </div>
       {props.single && (
@@ -438,6 +448,13 @@ function BoardView(props: {
 }
 
 /** 파일이 바뀌면 같은 iframe을 다시 불러오고 스크롤 위치를 되돌린다(PLAN.md 5장 즉시 반영) */
+/** 축소 미리보기: 서버가 만든 작은 그림(처음에는 몇 초 걸릴 수 있음) */
+function Thumb({ file, v }: { file: string; v: number }) {
+  const [ok, setOk] = useState(true);
+  if (!ok) return null;
+  return <img className="board-thumb" src={`/api/thumb?f=${encodeURIComponent(file)}&v=${v}`} alt="" loading="lazy" decoding="async" draggable={false} onError={() => setOk(false)} onLoad={(e) => e.currentTarget.classList.add("loaded")} />;
+}
+
 function LiveFrame(props: { src: string; title: string; reloadKey: number; editing: boolean; iframeRef: (el: HTMLIFrameElement | null) => void }) {
   const ref = useRef<HTMLIFrameElement | null>(null);
   const first = useRef(true);
