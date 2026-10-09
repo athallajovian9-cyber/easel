@@ -241,7 +241,7 @@ function wrapElements(html, { paths, hashes, display = "flex", direction }) {
   const indent = /^\s*$/.test(html.slice(ls, start)) ? html.slice(ls, start) : "";
   const inner = html.slice(start, end);
   if (indent && inner.includes("\n")) {
-    const reindented = inner.replace(/\n/g, "\n  ");
+    const reindented = inner.replace(/\n(?=[^\n])/g, "\n  "); // 빈 줄은 들여쓰지 않는다(줄 끝 공백 방지)
     return splice(html, start, end, `<div style="${style}">\n${indent}  ${reindented}\n${indent}</div>`);
   }
   return splice(html, start, end, `<div style="${style}">${inner}</div>`);

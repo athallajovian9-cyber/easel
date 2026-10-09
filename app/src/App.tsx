@@ -6,6 +6,7 @@ import { api, clientId, connectEvents, type ServerEvent } from "./api";
 import { Canvas, fitView, isTyping } from "./Canvas";
 import { elementAt, inlineStyles, rectOf } from "./editor";
 import { Inspector, type Comment } from "./Inspector";
+import { Layers } from "./Layers";
 import { Play } from "./Play";
 import { Properties } from "./Properties";
 import { useEditMode } from "./useEditMode";
@@ -382,6 +383,23 @@ export function App() {
             />
           );
         })()}
+        {editFile && (
+          <Layers
+            file={editFile}
+            version={reloadKeys[editFile] ?? 0}
+            selected={edit.state.paths}
+            onSelect={(p, add) => {
+              const cur = edit.state.paths;
+              void edit.select(add ? (cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p]) : [p]);
+            }}
+            onMove={async (path, toParentPath, index) => {
+              const { hash } = await api.get<{ hash: string }>(`/api/element?f=${encodeURIComponent(editFile)}&path=${encodeURIComponent(path)}`);
+              if (await doEdit({ op: "move", path, hash, toParentPath, index })) {
+                void edit.select([toParentPath ? `${toParentPath}/${index}` : String(index)]);
+              }
+            }}
+          />
+        )}
       </Inspector>
       </div>
       {playFile && (

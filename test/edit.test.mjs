@@ -99,3 +99,12 @@ test("wrap: 연속 형제를 flex div로 감쌈", () => {
   assert.ok(inspect(out, "0/1/1").tag === "a");
   assert.throws(() => applyEdit(SRC, { op: "wrap", paths: ["0/0", "0/2"] }), /연속/);
 });
+
+test("wrap: 여러 줄 요소는 안쪽을 한 단계 들여쓰고 빈 줄엔 공백을 넣지 않음", () => {
+  const src = `<body>\n<div>\n  <section>\n    <p>a</p>\n  </section>\n\n  <p>b</p>\n</div>\n</body>`;
+  const ha = inspect(src, "0/0").hash;
+  const hb = inspect(src, "0/1").hash;
+  const out = applyEdit(src, { op: "wrap", paths: ["0/0", "0/1"], hashes: [ha, hb], display: "grid" });
+  assert.ok(!/ +\n/.test(out), "줄 끝 공백 없음");
+  assert.match(out, /\n  <div style="display:grid;gap:8px">\n    <section>\n      <p>a<\/p>\n    <\/section>\n\n    <p>b<\/p>\n  <\/div>\n/);
+});
