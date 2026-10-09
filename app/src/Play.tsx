@@ -11,6 +11,17 @@ export function Play({ board, file, onClose, onLocate }: { board: Board; file: s
 
   // iframe 안 이동을 따라가 제목·크기를 바꾼다(링크는 상대 경로라 /screens/ 안에서 그대로 이동)
   const onLoad = () => {
+    const doc = ref.current?.contentDocument;
+    // 다른 출처로 가는 링크는 새 탭으로 연다
+    doc?.addEventListener("click", (e) => {
+      const a = (e.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+      if (!a) return;
+      const u = new URL(a.href, doc.baseURI);
+      if (u.origin !== location.origin) {
+        e.preventDefault();
+        window.open(u.href, "_blank", "noopener");
+      }
+    });
     const loc = ref.current?.contentWindow?.location.pathname ?? "";
     const m = loc.match(/^\/screens\/(.+)$/);
     if (m) setCurrent(decodeURIComponent(m[1]));

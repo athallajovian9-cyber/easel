@@ -50,3 +50,25 @@ test("파일 감시: 밖에서 고치면 1초 안에 그 보드만 다시 그린
   assert.deepEqual(b.body.missing, []);
   assert.ok(b.body.board.boards["scr-02.html"]);
 });
+
+test("끼운 보드: 원본(scr-15)이 바뀌면 끼운 흐름도(f-3)도 다시 그린다", async () => {
+  const { page, url } = env;
+  await openBoard(page, url, "f-3.html");
+  const p = path.join(env.dir, "screens/scr-15.html");
+  await fs.writeFile(p, (await fs.readFile(p, "utf8")).replace('<div class="x-dc">', '<div class="x-dc"><b id="e2e-embed">E2E</b>'));
+  await page.waitForFunction(
+    () => {
+      const outer = document.querySelector('.board[data-file="f-3.html"] iframe')?.contentDocument;
+      return [...(outer?.querySelectorAll("iframe") ?? [])].some((f) => f.contentDocument?.getElementById("e2e-embed"));
+    },
+    null,
+    { timeout: 4000 },
+  );
+});
+
+test("루트 경로 링크 /scr-02.html은 screens/로, 없는 파일은 404", async () => {
+  const r = await fetch(env.url + "/scr-02.html", { redirect: "manual" });
+  assert.equal(r.status, 302);
+  assert.equal(r.headers.get("location"), "/screens/scr-02.html");
+  assert.equal((await fetch(env.url + "/nope.html", { redirect: "manual" })).status, 404);
+});

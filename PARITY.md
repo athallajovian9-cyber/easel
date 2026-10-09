@@ -17,8 +17,8 @@
 
 | 판정 | 개수 |
 | --- | --- |
-| PASS | 13 |
-| PARTIAL | 29 |
+| PASS | 14 |
+| PARTIAL | 28 |
 | MISSING | 29 |
 | N/A | 3 |
 | 합계 | 74 |
@@ -67,7 +67,7 @@
 | 26 | C 편집 | 실행 취소·다시, 사람·AI 동시 수정 충돌 | 됨 | 파일별 서버 기록 50개로 ⌘Z/⌘⇧Z. 옛 해시로 편집하면 409, 밖에서 바뀌면 실행 취소 기록을 비움 | PASS | `C26.undo_redo`(배경 선언만 빠졌다 돌아옴), 수동 재현: 밖에서 글자 수정 → 옛 해시 setStyle 409 "파일이 바뀜, 다시 선택" | S |
 | 27 | C 편집 | 원본 그 부분만 바뀜 | 됨 | parse5 위치로 그 구간만 교체 | PASS | `C27.style_diff`(1줄, `style="gap:12px;background:#111111"`), 단위 테스트 12개 | S |
 | 28 | D 프로토 | Play(그 자리, 전체 화면) | 둘 다 | 전체 화면 오버레이만. 보드 그 자리에서 실행 없음 | PARTIAL | `D28.play_nav`="SCR-04 상품 상세" · `D28-play.png` | S |
-| 29 | D 프로토 | 링크(상대·`/`루트·`#id`·외부 새 탭) | 모두 | 상대 경로와 `#id`는 브라우저 기본으로 됨. `/scr-02.html`은 캔버스 앱 index를 돌려줘 엉뚱한 화면이 뜸. 외부 링크는 iframe 안에서 열림 | PARTIAL | `D29.root_path_status`=200(앱 페이지), `D29.external_links_target`=[] | S |
+| 29 | D 프로토 | 링크(상대·`/`루트·`#id`·외부 새 탭) | 모두 | 상대 경로·#id는 브라우저 기본. /로 시작하는 링크는 screens/에 같은 파일이 있으면 302로 그리로(없으면 404). Play에서 다른 출처 링크는 새 탭 | PASS | e2e: /scr-02.html → 302 /screens/scr-02.html, /nope.html 404 · 코드: Play.tsx 다른 출처 window.open | S |
 | 30 | D 프로토 | 스크립트(상태·이벤트·조건·반복) | 됨 | iframe에서 그대로 실행 | PASS | `D30.script_runs`: 버튼 두 번 → "2" | S |
 | 31 | D 프로토 | 다른 보드 끼워 넣기, 원본 바뀌면 갱신 | dc-import가 따라 바뀜 | 화면마다 iframe src를 색인해, 원본이 바뀌면 그 화면을 직접·간접으로 끼운 보드도 다시 불러옴 | PASS | 단위 테스트 deps(직접·간접), e2e: scr-15 수정 → f-3 안 iframe에 반영 4초 안 | S |
 | 32 | D 프로토 | Tweaks(색·enum·boolean·숫자 조절) | 패널에서 조절 | 없음(PLAN 범위 밖). 대체 제안: `:root`의 CSS 변수와 `<meta name="tweak" …>` 선언을 읽어 속성 패널에 표시 | MISSING | PLAN 0장 범위 밖 | M |

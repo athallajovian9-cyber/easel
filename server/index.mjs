@@ -165,6 +165,19 @@ export async function createServer({ dir, port, dev = true, extraRoutes = [] }) 
         res.writeHead(404);
         return res.end("not found");
       }
+      // 화면 안의 '/'로 시작하는 링크: screens/에 같은 파일이 있으면 그리로 보낸다(Claude Design의 프로젝트 루트와 같은 뜻)
+      if (req.method === "GET" && path.extname(url.pathname)) {
+        const rel = decodeURIComponent(url.pathname.slice(1));
+        const inScreens = safeJoin(store.screensDir, rel);
+        if (inScreens && existsSync(inScreens)) {
+          res.writeHead(302, { Location: `/screens/${rel.split("/").map(encodeURIComponent).join("/")}${url.search}${url.hash}` });
+          return res.end();
+        }
+        const inDir = safeJoin(dir, rel);
+        if (inDir && (await serveFile(res, inDir))) return;
+        res.writeHead(404);
+        return res.end("not found");
+      }
       await serveFile(res, path.join(distDir, "index.html"));
     } catch (e) {
       console.error(e);
