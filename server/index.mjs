@@ -51,6 +51,24 @@ export function safeJoin(root, rel) {
   return p;
 }
 
+// 화면 HTML을 보낼 때 <head>에 오류 수집 스크립트를 끼운다(파일은 그대로). 부모 창(캔버스)이 모아서 오류 보드 목록을 만든다
+const PROBE = `<script data-dc-probe>(function(){var f=decodeURIComponent(location.pathname.replace(/^\\/screens\\//,""));function send(m){try{if(parent!==window)parent.postMessage(Object.assign({type:"dc-error",file:f},m),"*")}catch(e){}}send({start:true});addEventListener("error",function(e){var t=e.target;if(t&&t!==window&&(t.src||t.href)){send({kind:"resource",message:"불러오지 못함: "+(t.getAttribute("src")||t.getAttribute("href"))})}else{send({kind:"script",message:String(e.message||e),line:e.lineno,col:e.colno})}},true);addEventListener("unhandledrejection",function(e){send({kind:"script",message:"Promise: "+String(e.reason&&e.reason.message||e.reason)})});addEventListener("load",function(){send({loaded:true})})})()</script>`;
+export function injectProbe(html) {
+  const m = /<meta[^>]*charset[^>]*>/i.exec(html) ?? /<head[^>]*>/i.exec(html) ?? /<html[^>]*>/i.exec(html) ?? /<!doctype[^>]*>/i.exec(html);
+  return m ? html.slice(0, m.index + m[0].length) + PROBE + html.slice(m.index + m[0].length) : PROBE + html;
+}
+
+async function serveScreen(res, file) {
+  try {
+    const html = injectProbe(await fs.readFile(file, "utf8"));
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Content-Length": Buffer.byteLength(html), "Cache-Control": "no-store" });
+    res.end(html);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function serveFile(res, file) {
   try {
     const st = await fs.stat(file);
@@ -98,7 +116,7 @@ export async function createServer({ dir, port, dev = true, extraRoutes = [] }) 
   }
   if (!existsSync(path.join(distDir, "index.html"))) throw new Error("앱 빌드가 없어요(npm start로 실행하면 만들어져요)");
 
-  const LOCKED = /^\/api\/(board|boards\/|history\/|edit|undo|redo|place)/;
+  const LOCKED = /^\/api\/(board|boards\/|history\/|edit|undo|redo|place|notes|pages)/;
   const routes = [
     ["GET", "/api/health", async (req, res) => sendJson(res, 200, { ok: true, dir })],
     [
@@ -135,6 +153,7 @@ export async function createServer({ dir, port, dev = true, extraRoutes = [] }) 
       // 디자인 폴더: /screens/*, /assets/* 같은 정적 파일(같은 출처라 iframe에서 contentDocument 접근 가능)
       if (req.method === "GET" && (url.pathname.startsWith("/screens/") || url.pathname.startsWith("/assets/"))) {
         const p = safeJoin(dir, decodeURIComponent(url.pathname.slice(1)));
+        if (p && url.pathname.startsWith("/screens/") && p.endsWith(".html") && (await serveScreen(res, p))) return;
         if (p && (await serveFile(res, p))) return;
         res.writeHead(404);
         return res.end("not found");

@@ -5,6 +5,7 @@ import path from "node:path";
 
 import { TOOL_ROOT } from "./args.mjs";
 import { boardRoutes } from "./boards.mjs";
+import { chatRoutes } from "./chat.mjs";
 import { applyEdit, EditError } from "./edit.mjs";
 import { writeAtomic } from "./fsutil.mjs";
 import { inspect, outline } from "./html.mjs";
@@ -13,6 +14,7 @@ import { watchDesign } from "./watch.mjs";
 
 const OUTER_LIMIT = 4096;
 let selection = null;
+const chat = chatRoutes({ getSelection: () => selection });
 
 async function writeScreen(ctx, p, html) {
   await writeAtomic(p, html);
@@ -118,6 +120,7 @@ export const extraRoutes = [
     },
   ]),
   ...boardRoutes(),
+  ...chat.routes,
   [
     "GET",
     "/api/element",
@@ -136,7 +139,29 @@ export const extraRoutes = [
       sendJson(res, 200, { tree: outline(html) });
     },
   ],
-  ["GET", "/api/selection", async (req, res) => sendJson(res, 200, { selection })],
+  [
+    "GET",
+    "/api/selection",
+    async (req, res, url, ctx) => {
+      // 선택 + 캔버스 상태(모드·페이지·보이는/선택한 보드·저장 대기·최근 편집) + 오류 보드
+      const c = chat.state.context ?? {};
+      const { missing } = await ctx.store.syncBoard();
+      const errored = { ...chat.state.errors };
+      for (const f of missing) errored[f] = [{ kind: "missing", message: "파일이 없어요" }];
+      sendJson(res, 200, {
+        selection,
+        mode: c.mode ?? null,
+        page: c.page ?? null,
+        pageName: c.pageName ?? null,
+        visibleArtboards: c.visibleArtboards ?? [],
+        selectedArtboards: c.selectedArtboards ?? [],
+        dirty: !!c.dirty,
+        edits: ctx.history.state().undo.slice(-10),
+        erroredArtboards: Object.keys(errored),
+        firstError: Object.entries(errored).map(([file, l]) => ({ file, ...l[0] }))[0] ?? null,
+      });
+    },
+  ],
   [
     "PUT",
     "/api/selection",
@@ -157,6 +182,8 @@ export const extraRoutes = [
           outerHTML: info.source.length > OUTER_LIMIT ? info.source.slice(0, OUTER_LIMIT) + "…" : info.source,
           hash: info.hash,
           styles: body.styles ?? {},
+          kind: body.kind ?? null,
+          label: body.label ?? null,
           selectedAt: new Date().toISOString(),
         };
       }

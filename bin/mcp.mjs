@@ -66,12 +66,11 @@ server.registerTool(
   "get_selection",
   {
     description:
-      "사용자가 캔버스 편집 모드에서 방금 클릭한 요소: 파일, 경로(<body> 자식부터 요소 인덱스), 태그, 텍스트, 원본 outerHTML(4KB까지), 해시, 계산된 스타일. '선택한 것 고쳐'라는 요청에 쓴다",
+      "사용자가 지금 보는 것: selection(편집 모드에서 클릭한 요소 — 파일, 경로(<body> 자식부터 요소 인덱스), 태그, kind·label, 텍스트, 원본 outerHTML(4KB까지), 해시, 계산된 스타일), mode(canvas·edit·focus·play), page·pageName, visibleArtboards(화면에 보이는 보드), selectedArtboards, dirty(저장 대기), edits(최근 편집 기록), erroredArtboards·firstError(오류 난 보드). '선택한 것 고쳐', '이 화면' 같은 요청에 쓴다",
     inputSchema: {},
   },
   async () => {
-    const { selection } = await callJson("GET", "/api/selection");
-    return ok(selection ?? "선택 없음");
+    return ok(await callJson("GET", "/api/selection"));
   },
 );
 
@@ -126,6 +125,94 @@ server.registerTool(
     },
   },
   async (args) => ok(await callJson("POST", "/api/place", args)),
+);
+
+server.registerTool(
+  "list_errors",
+  { description: "오류 난 보드 목록(스크립트 오류·불러오지 못한 이미지·없는 파일)과 첫 오류", inputSchema: {} },
+  async () => {
+    const s = await callJson("GET", "/api/selection");
+    const { errors } = await callJson("GET", "/api/errors");
+    return ok({ erroredArtboards: s.erroredArtboards, firstError: s.firstError, errors });
+  },
+);
+
+server.registerTool(
+  "create_board",
+  {
+    description: "새 보드(HTML 파일)를 틀에서 만들고 캔버스에 둔다. 틀: blank(빈 보드)·mobile(390×844 모바일)·desktop(1440×900)·doc(문서). 만든 뒤 파일을 직접 고친다",
+    inputSchema: {
+      file: z.string().optional().describe("예: scr-40.html"),
+      title: z.string().optional(),
+      template: z.enum(["blank", "mobile", "desktop", "doc"]).optional(),
+      x: z.number().optional(),
+      y: z.number().optional(),
+      w: z.number().optional(),
+      h: z.number().optional(),
+      page: z.string().optional(),
+    },
+  },
+  async (args) => ok(await callJson("POST", "/api/boards/create", args)),
+);
+
+server.registerTool(
+  "list_notes",
+  { description: "캔버스 메모(제목·포스트잇) 목록", inputSchema: { page: z.string().optional() } },
+  async ({ page }) => {
+    const { board } = await callJson("GET", "/api/board");
+    const first = board.pages[0]?.id;
+    return ok(Object.entries(board.notes).map(([id, n]) => ({ id, ...n, page: n.page ?? first })).filter((n) => !page || n.page === page));
+  },
+);
+
+server.registerTool(
+  "add_note",
+  {
+    description: "캔버스에 메모 추가. kind=title(큰 제목) 또는 sticky(포스트잇)",
+    inputSchema: { kind: z.enum(["title", "sticky"]), text: z.string(), x: z.number(), y: z.number(), w: z.number().optional(), page: z.string().optional() },
+  },
+  async (args) => ok(await callJson("POST", "/api/notes", { action: "add", ...args })),
+);
+
+server.registerTool(
+  "update_note",
+  {
+    description: "메모 고치기(글·위치·너비·페이지·색·크기·굵게·기울임)",
+    inputSchema: {
+      id: z.string(),
+      text: z.string().optional(),
+      x: z.number().optional(),
+      y: z.number().optional(),
+      w: z.number().optional(),
+      page: z.string().optional(),
+      color: z.string().optional(),
+      size: z.number().optional(),
+      bold: z.boolean().optional(),
+      italic: z.boolean().optional(),
+    },
+  },
+  async (args) => ok(await callJson("POST", "/api/notes", { action: "update", ...args })),
+);
+
+server.registerTool(
+  "delete_note",
+  { description: "메모 지우기(앱에서 실행 취소 가능)", inputSchema: { id: z.string() } },
+  async ({ id }) => ok(await callJson("POST", "/api/notes", { action: "delete", id })),
+);
+
+server.registerTool(
+  "list_pages",
+  { description: "캔버스 페이지 목록(첫 페이지가 기본)", inputSchema: {} },
+  async () => ok((await callJson("GET", "/api/board")).board.pages),
+);
+
+server.registerTool(
+  "manage_page",
+  {
+    description: "페이지 추가(add, name)·이름 바꾸기(rename, id·name)·삭제(delete, id — 항목은 첫 페이지로)·순서(move, id·index)",
+    inputSchema: { action: z.enum(["add", "rename", "delete", "move"]), id: z.string().optional(), name: z.string().optional(), index: z.number().optional() },
+  },
+  async (args) => ok(await callJson("POST", "/api/pages", args)),
 );
 
 await server.connect(new StdioServerTransport());
