@@ -121,6 +121,39 @@ export const extraRoutes = [
   ]),
   ...boardRoutes(),
   ...chat.routes,
+  // 자산 보관함: docs/design/assets/ 목록과 올리기(이미지·폰트). 화면에서는 ../assets/<이름>으로 쓴다
+  [
+    "GET",
+    "/api/assets",
+    async (req, res, url, ctx) => {
+      const dir = path.join(ctx.dir, "assets");
+      const names = await fs.readdir(dir).catch(() => []);
+      const list = [];
+      for (const n of names.filter((n) => !n.startsWith(".")).sort()) {
+        const st = await fs.stat(path.join(dir, n));
+        if (st.isFile()) list.push({ name: n, size: st.size, kind: /\.(png|jpe?g|gif|webp|svg|avif)$/i.test(n) ? "image" : /\.(woff2?|ttf|otf)$/i.test(n) ? "font" : "file", url: `/assets/${encodeURIComponent(n)}`, ref: `../assets/${n}` });
+      }
+      sendJson(res, 200, { assets: list });
+    },
+  ],
+  [
+    "POST",
+    "/api/assets",
+    async (req, res, url, ctx) => {
+      const b = await readBody(req, 30 * 1024 * 1024);
+      const base = String(b.name ?? "").replace(/[^\w.-]+/g, "-").replace(/^-+/, "").toLowerCase();
+      if (!/\.(png|jpe?g|gif|webp|svg|avif|woff2?|ttf|otf)$/i.test(base)) return sendJson(res, 400, { error: "이미지(png·jpg·gif·webp·svg·avif)나 폰트(woff2·woff·ttf·otf)만 올릴 수 있어요" });
+      const dir = path.join(ctx.dir, "assets");
+      await fs.mkdir(dir, { recursive: true });
+      const stem = base.replace(/\.[^.]+$/, "");
+      const ext = base.slice(stem.length);
+      let name = base;
+      for (let i = 2; await fs.access(path.join(dir, name)).then(() => true, () => false); i++) name = `${stem}-${i}${ext}`;
+      await writeAtomic(path.join(dir, name), Buffer.from(String(b.data ?? ""), "base64"));
+      ctx.broadcast({ type: "assets-changed" });
+      sendJson(res, 200, { name, url: `/assets/${encodeURIComponent(name)}`, ref: `../assets/${name}` });
+    },
+  ],
   [
     "GET",
     "/api/element",
@@ -128,7 +161,7 @@ export const extraRoutes = [
       const { html } = await readScreen(ctx, url.searchParams.get("f"));
       const info = inspect(html, url.searchParams.get("path") ?? "");
       if (!info) return sendJson(res, 404, { error: "요소가 없어요(파일이 바뀜, 다시 선택)" });
-      sendJson(res, 200, { hash: info.hash, tag: info.tag, text: info.text.slice(0, 200), source: info.source.slice(0, OUTER_LIMIT) });
+      sendJson(res, 200, { hash: info.hash, tag: info.tag, text: info.text.slice(0, 200), source: url.searchParams.get("full") ? info.source : info.source.slice(0, OUTER_LIMIT) });
     },
   ],
   [

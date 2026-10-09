@@ -173,7 +173,18 @@ export function applyEdit(html, req) {
     const sep = /^\s*$/.test(indent) ? "\n" + indent : "";
     return splice(html, range.end, range.end, sep + source);
   }
-  if (op === "move") return moveElement(html, req);
+  if (op === "move") {
+    // flex·grid 밖으로 끌어낼 때: 부모·형제 크기를 먼저 고정해 다른 요소가 움직이지 않게 한다(같은 한 단계)
+    let h = html;
+    for (const f of req.freeze ?? []) for (const [prop, value] of Object.entries(f.props ?? {})) h = applyEdit(h, { op: "setStyle", path: f.path, prop, value });
+    return moveElement(h, req);
+  }
+  if (op === "insert") return insertElement(html, req);
+  if (op === "batch") {
+    // 같은 요소에 여러 속성: 해시는 첫 연산만 확인한다
+    if (!Array.isArray(req.ops) || !req.ops.length) throw new EditError(400, "ops가 필요해요");
+    return req.ops.reduce((h, o, i) => applyEdit(h, { ...o, hash: i === 0 ? o.hash : undefined }), html);
+  }
   if (op === "wrap") return wrapElements(html, req);
   throw new EditError(400, `모르는 op: ${op}`);
 }
@@ -245,4 +256,41 @@ function wrapElements(html, { paths, hashes, display = "flex", direction }) {
     return splice(html, start, end, `<div style="${style}">\n${indent}  ${reindented}\n${indent}</div>`);
   }
   return splice(html, start, end, `<div style="${style}">${inner}</div>`);
+}
+
+/** 다른 보드(또는 같은 보드)에서 복사한 요소 소스를 기준 요소 뒤(after)·앞(before)·안 끝(inside)에 붙인다 */
+function insertElement(html, { path, hash, position = "after", html: src }) {
+  let code = String(src ?? "").trim();
+  // 복사한 소스의 원래 들여쓰기를 걷어낸다(둘째 줄부터 가장 얕은 들여쓰기 기준)
+  const rest = code.split("\n").slice(1).filter((l) => l.trim());
+  const min = rest.length ? Math.min(...rest.map((l) => l.match(/^[ \t]*/)[0].length)) : 0;
+  if (min) code = code.split("\n").map((l, i) => (i ? l.slice(Math.min(min, l.match(/^[ \t]*/)[0].length)) : l)).join("\n");
+  if (!code || !/^<[a-zA-Z]/.test(code)) throw new EditError(400, "붙일 요소가 없어요");
+  if (/<script\b/i.test(code)) throw new EditError(422, "script는 붙일 수 없어요");
+  if (path == null || path === "") {
+    const doc = parseHtml(html);
+    const body = nodeAtPath(doc, "");
+    const kids = elementChildren(body);
+    const at = kids.length ? kids[kids.length - 1].sourceCodeLocation.endOffset : body.sourceCodeLocation.startTag.endOffset;
+    return splice(html, at, at, "\n" + code);
+  }
+  const { node, range } = target(html, path, hash);
+  const ls = html.lastIndexOf("\n", range.start - 1) + 1;
+  const indent = /^\s*$/.test(html.slice(ls, range.start)) ? html.slice(ls, range.start) : "";
+  const reindent = (ind) => code.replace(/\n(?=[^\n])/g, "\n" + ind);
+  if (position === "before") return splice(html, range.start, range.start, reindent(indent) + (indent ? "\n" + indent : ""));
+  if (position === "inside") {
+    const kids = elementChildren(node);
+    if (kids.length) {
+      const last = kids[kids.length - 1];
+      const l2 = html.lastIndexOf("\n", last.sourceCodeLocation.startOffset - 1) + 1;
+      const ind2 = /^\s*$/.test(html.slice(l2, last.sourceCodeLocation.startOffset)) ? html.slice(l2, last.sourceCodeLocation.startOffset) : "";
+      const at = last.sourceCodeLocation.endOffset;
+      return splice(html, at, at, (ind2 ? "\n" + ind2 : "") + reindent(ind2));
+    }
+    const st = node.sourceCodeLocation?.startTag;
+    if (!st || !node.sourceCodeLocation.endTag) throw new EditError(422, "이 요소 안에는 붙일 수 없어요");
+    return splice(html, st.endOffset, st.endOffset, code);
+  }
+  return splice(html, range.end, range.end, (indent ? "\n" + indent : "") + reindent(indent));
 }
