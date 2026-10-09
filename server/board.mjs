@@ -3,6 +3,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
+import { formatBoard } from "./boardFormat.mjs";
 import { writeAtomic } from "./fsutil.mjs";
 
 const DEFAULT_SIZE = { w: 390, h: 844 };
@@ -35,7 +36,7 @@ export function createBoardStore(dir) {
   let lastWritten = null;
   async function writeBoard(board) {
     // 직렬 저장: 동시에 두 요청이 와도 파일이 섞이지 않게 한다
-    const text = JSON.stringify(board, null, 1) + "\n";
+    const text = formatBoard(board);
     lastWritten = text;
     writing = writing.then(() => writeAtomic(boardPath, text));
     await writing;

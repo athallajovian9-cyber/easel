@@ -17,8 +17,8 @@
 
 | 판정 | 개수 |
 | --- | --- |
-| PASS | 14 |
-| PARTIAL | 28 |
+| PASS | 15 |
+| PARTIAL | 27 |
 | MISSING | 29 |
 | N/A | 3 |
 | 합계 | 74 |
@@ -96,7 +96,7 @@
 | 55 | J 추가 | 접근성 검사(누르는 영역·명암비·label) | Claude에게 리뷰 요청 | 없음 | MISSING | 코드 | M |
 | 56 | J 추가 | 한글 IME | 조합 중 Enter·blur에 깨지지 않음 | 글자 편집 Enter 처리에 `isComposing` 확인이 없어 조합 중 Enter에 확정·저장될 수 있음. 실제 IME는 자동화로 시험 못 함 | PARTIAL | 코드: `onTextEdit` onKey | S |
 | 57 | J 추가 | 캔버스 조작 실행 취소 | 됨 | 보드 이동·크기·메모·페이지는 실행 취소 없음(HTML 편집만) | MISSING | 코드 | M |
-| 58 | J 추가 | board.json 충돌 최소화 | – | 키 정렬 안 함, 보드 하나가 여러 줄. 병합 시험: 두 브랜치에서 각각 보드 이동(인접·먼 보드) → 충돌 없음. 각각 메모 추가 → 충돌이 나고 JSON 깨짐 | PARTIAL | `J58.keys_sorted`=false, `one_line_per_board`=false, `merge/` 시험 3개 | S |
+| 58 | J 추가 | board.json 충돌 최소화 | – | 보드·메모 키를 정렬하고 항목 하나를 한 줄로, 항목 사이 빈 줄 하나. 서버가 저장할 때 항상 이 형식. 기존 board.json은 값은 그대로 형식만 다시 씀(865→324줄) | PASS | 단위 테스트 boardFormat: 값 동일·한 줄·정렬·다시 써도 같음, git merge-file 병합 3가지(이웃 보드 각각 이동·메모 각각 추가·이동+메모) 충돌 0 | S |
 | 59 | J 추가 | HTML 이름 바꾸기·삭제 따라가기 | – | 이름을 바꾸면 새 보드가 자동 배치되고 옛 보드는 '파일 없음'과 '파일 없는 보드 1'로 표시. 따라가거나 정리하는 동작 없음 | PARTIAL | `J59.rename_result`, `J59.missing_badge` | S |
 | 60 | J 추가 | 요소를 다른 보드로 복사·붙여넣기 | 됨 | 없음 | MISSING | 코드 | M |
 | 61 | J 추가 | 보드 검색·이동 | – | 없음 | MISSING | 코드 | S |
