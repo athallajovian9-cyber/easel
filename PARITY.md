@@ -17,9 +17,9 @@
 
 | 판정 | 개수 |
 | --- | --- |
-| PASS | 26 |
-| PARTIAL | 25 |
-| MISSING | 20 |
+| PASS | 34 |
+| PARTIAL | 22 |
+| MISSING | 15 |
 | N/A | 3 |
 | 합계 | 74 |
 
@@ -73,10 +73,10 @@
 | 32 | D 프로토 | Tweaks(색·enum·boolean·숫자 조절) | 패널에서 조절 | 없음(PLAN 범위 밖). 대체 제안: `:root`의 CSS 변수와 `<meta name="tweak" …>` 선언을 읽어 속성 패널에 표시 | MISSING | PLAN 0장 범위 밖 | M |
 | 33 | E AI | AI가 새 HTML → 즉시 보드·자동 배치 | 됨 | 323ms 안에 보드가 생기고 board-size 메타 크기로 '새 화면' 줄에 배치. Claude Code·Codex 둘 다 새 화면 생성 → 자동 배치 → `place_board` 제목 확인 | PASS | `E33.*`, Claude Code(.mcp.json, claude -p) 2026-10-09: zz-claude-test.html 생성·제목 'Claude 시험' 캔버스 표시, Codex(M7) 같은 결과 | S |
 | 34 | E AI | AI 수정 즉시 반영(스크롤·선택 유지) | 됨 | 484ms에 그 보드만 다시 불러오고 같은 경로로 다시 선택. Claude Code·Codex 모두 "선택한 것 고쳐" → 그 글자만 바뀌고 캔버스 반영. 스크롤 되돌림은 스크롤 있는 보드에서 아직 시험 못 함 | PARTIAL | `E34.reflect_ms`=484, Claude Code: scr-32 0/1/1/5 글자만 수정(diff 1줄)·캔버스 반영 true, Codex(M7) 같은 결과 | S |
-| 35 | E AI | 선택 인식 정보 | mode, page, pageName, visible·selectedArtboards, 요소 kind·label, dirty, edits | file, path, paths, tag, text, outerHTML(4KB), hash, styles만. 캔버스 상태(보이는 보드·페이지·모드)와 편집 횟수 없음 | PARTIAL | 코드: `PUT /api/selection` · Claude Code·Codex 모두 get_selection = scr-32.html 0/1/1/5 a "문의 보내기" | M |
-| 36 | E AI | 오류 난 보드 목록·"고쳐 달라" | erroredArtboards, firstError, Ask Claude to fix | 없음(iframe 오류를 모으지 않음) | MISSING | 코드 | M |
+| 35 | E AI | 선택 인식 정보 | mode, page, pageName, visible·selectedArtboards, 요소 kind·label, dirty, edits | get_selection = selection(+kind·label) · mode(canvas/edit/focus/play) · page·pageName · visibleArtboards · selectedArtboards · dirty · edits(최근 기록) · erroredArtboards·firstError. 앱이 화면 상태를 PUT /api/context로 알림 | PASS | ux 스크립트 MCP: get_selection 키 10개; 편집 모드 a.btn → kind link·label '문의 보내기'·selectedArtboards [scr-32.html] | M |
+| 36 | E AI | 오류 난 보드 목록·"고쳐 달라" | erroredArtboards, firstError, Ask Claude to fix | 서버가 화면 HTML <head>에 오류 수집 스크립트를 끼워(파일은 그대로) 스크립트 오류·불러오지 못한 리소스를 모음. 도구 막대 '오류 N' 메뉴·왼쪽 목록 경고·보드 우클릭 'AI에게 오류 고쳐 달라기'가 채팅에 오류 내용을 넣어 엶. MCP list_errors | PASS | ux 스크립트: zz-err.html → firstError 'undefinedFn is not defined'(줄 1), 고쳐 달라기 초안 채움; .out/ux/p2-36-*.png | M |
 | 37 | E AI | AI가 댓글 읽기·답하기·해결 | 됨 | list·add·resolve 됨. 답글(스레드) 없음 | PARTIAL | MCP 도구 목록 | S |
-| 38 | E AI | AI가 배치·제목·페이지·메모 변경 | 캔버스 파일 전체를 쓴다 | `place_board`(위치·제목·페이지)만. 메모·페이지 만들기 도구 없음 | PARTIAL | MCP 도구 목록 | S |
+| 38 | E AI | AI가 배치·제목·페이지·메모 변경 | 캔버스 파일 전체를 쓴다 | place_board + create_board(틀) + list/add/update/delete_note + list_pages·manage_page(add·rename·delete·move). 모두 앱 실행 취소 기록에 남음 | PASS | ux 스크립트 MCP: add_note→list_notes에 있음, update·delete, 페이지 '시안' 추가, create_board doc | S |
 | 39 | E AI | 스크린샷(보드·요소) | 됨 | 보드 전체·요소 하나 PNG(@2x) | PASS | M4 시험: `.out/scr-32--0-1-1-5.png` | S |
 | 40 | F DS | 토큰 등록·테마 메뉴 | 디자인 시스템 설치·테마 선택 | 없음(PLAN 범위 밖) | MISSING | PLAN 0장 | L |
 | 41 | F DS | 색·글꼴 입력에 토큰 스와치 | 됨 | 색·배경에 토큰 7색 스와치. 글꼴·간격 토큰 없음 | PARTIAL | `C20-props.png` | S |
@@ -84,14 +84,14 @@
 | 43 | G 협업 | 댓글 고정·목록·답글·해결·작성자 | 됨 | 요소·보드 고정 핀, 목록, 해결·다시 열기, 작성자. 답글 없음. 축소 상태 보드는 핀이 오른쪽 위에 쌓임 | PARTIAL | M4 댓글 API 시험 · 코드: `renderOverlay` | S |
 | 44 | G 협업 | 버전 저장·분기 | 기본 기록 없음, Claude에게 저장 요청 | git 커밋·브랜치로 대체 | N/A | 공식 도움말: 버전 기록 아직 없음 | – |
 | 45 | G 협업 | 공유·권한·실시간 공동 편집 | 보기·댓글·편집 권한 공유 | git push·PR로 공유하고 각자 로컬에서 실행 | N/A | – | – |
-| 46 | H 단축키 | ⌘Z ⌘⇧Z Delete ⌘D 화살표 ⌘A ⌘G 스페이스 ⌘0 ⌘1 ⌘C ⌘V | 됨 | ⌘Z ⌘⇧Z(⌘Y) Delete ⌘D 화살표(Shift 10) ⌘A ⌘0 ⌘1 ⌘± ⇧1 ⇧2 ⌘K ⌘\\ F2 F E M V H B T N Esc 스페이스. ⌘G ⌘C ⌘V F6 없음 | PARTIAL | App.tsx 단축키 표; 메뉴·툴팁에 표시 | M |
+| 46 | H 단축키 | ⌘Z ⌘⇧Z Delete ⌘D 화살표 ⌘A ⌘G 스페이스 ⌘0 ⌘1 ⌘C ⌘V | 됨 | ⌘Z ⌘⇧Z(⌘Y) Delete ⌘D 화살표(Shift 10) ⌘A ⌘0 ⌘1 ⌘± ⇧1 ⇧2 ⌘K ⌘J ⌘\\ F2 F E M V H B T N Esc 스페이스. ⌘G ⌘C ⌘V F6 없음 | PARTIAL | App.tsx 단축키 표; 메뉴·툴팁에 표시 | M |
 | 47 | H 사용성 | 다크 모드·창 크기·휠 조작감 | 됨 | 토큰을 :root에 두고 prefers-color-scheme 다크·data-theme 둘 다 정의. 직접 바꾸는 단추는 P4 | PARTIAL | .out/ux/p1-dark.png | S |
 | 48 | I 렌더링 | 98장 픽셀 동일성 | – | 98장 모두 1% 미만(최대 s-03-unfollowed 0.127%, 평균 0.059%) | PASS | `pixel/pixel.json` | – |
-| 49 | J 추가 | 캔버스 안 채팅 패널(claude -p·codex exec, 스트리밍, 취소, 에이전트 선택) | 채팅이 기본 | 없음 | MISSING | 코드 | L |
-| 50 | J 추가 | 댓글을 AI에게 보내 그 위치만 고치기 | 인라인 댓글로 부분 수정 | 없음(선택 '복사'로 붙여 넣기만) | MISSING | 코드 | M |
-| 51 | J 추가 | 참고 자료 첨부(이미지·문서·URL) | 업로드·링크 | 없음 | MISSING | 코드 | M |
-| 52 | J 추가 | "N가지 안" 나란히 | 변형 2~3개 제안 | AI가 파일 N개를 만들면 '새 화면' 줄에 나란히 자동 배치됨. 요청 UI는 없음 | PARTIAL | `E33.autoplaced`(다음 새 파일은 오른쪽에 이어짐) | S |
-| 53 | J 추가 | 템플릿·빈 보드에서 시작 | 템플릿 | 없음 | MISSING | 코드 | S |
+| 49 | J 추가 | 캔버스 안 채팅 패널(claude -p·codex exec, 스트리밍, 취소, 에이전트 선택) | 채팅이 기본 | 오른쪽 'AI'(⌘J) 탭: Claude Code·Codex 고르기(설치 확인), 선택 요소·고른 보드·보이는 보드 칩(눌러서 빼기), Enter 보내기(한글 조합 중 무시), 글 조각 스트리밍·도구 줄·비용, 취소(Esc·단추, 프로세스 묶음 종료), 이어서 대화(--resume / exec resume), 새 대화 | PASS | e2e `chat.e2e.mjs`(가짜 에이전트: 스트리밍·원본 반영·맥락·취소); 실제: Claude Code 48s·Codex 38s로 scr-02 title만 바뀜; 단위 `chat.test.mjs`; .out/ux/p2-49-*.png | L |
+| 50 | J 추가 | 댓글을 AI에게 보내 그 위치만 고치기 | 인라인 댓글로 부분 수정 | 댓글 'AI에게 보내기' → 채팅에 댓글 칩. 맥락에 파일·경로·글과 '이 위치만 고치고 resolve_comment' 지시 | PASS | ux 스크립트: 프롬프트에 '댓글(c…) screens/scr-02.html 경로 0: "제목을 더 크게"' | M |
+| 51 | J 추가 | 참고 자료 첨부(이미지·문서·URL) | 업로드·링크 | 링크 추가, 파일·이미지 첨부(단추·끌어 놓기·붙여넣기) → docs/design/.refs/(gitignore)에 저장, 맥락에 경로. Codex는 이미지를 -i로도 넘김 | PASS | ux 스크립트: 프롬프트에 참고 링크·참고 파일(이미지) .refs/…-ref.png; .out/ux/p2-50-51-attach.png | M |
+| 52 | J 추가 | "N가지 안" 나란히 | 변형 2~3개 제안 | 채팅 '안 N개'(2~4): 원본을 -v1…-vN으로 복사해 원본 아래 빈 줄에 나란히 두고, 에이전트에게 각각 다른 방향으로 고치라고 지시. 끝나면 그 자리로 이동 | PASS | 실제: Claude Code 48s·Codex 59s 모두 v1에 '당도순', v2에 '지도', 원본 그대로; .out/ux/p2-52-variants.png | S |
+| 53 | J 추가 | 템플릿·빈 보드에서 시작 | 템플릿 | 도구 막대 '새 보드' 메뉴: 빈 보드·모바일 화면·PC 화면·문서 틀(토큰 색·Pretendard), 우클릭 '여기에 모바일 화면 틀', MCP create_board(template) | PASS | ux 스크립트: 모바일 화면 → mobile.html 생성; .out/ux/p2-53-*.png | S |
 | 54 | J 추가 | 자산 보관함(이미지·폰트 업로드, 재사용) | 업로드 자산 | 없음(`docs/design/assets/` 정적 서빙만) | MISSING | 코드 | M |
 | 55 | J 추가 | 접근성 검사(누르는 영역·명암비·label) | Claude에게 리뷰 요청 | 없음 | MISSING | 코드 | M |
 | 56 | J 추가 | 한글 IME | 조합 중 Enter·blur에 깨지지 않음 | 글자 편집 Enter 처리에 `isComposing` 확인이 없어 조합 중 Enter에 확정·저장될 수 있음. 실제 IME는 자동화로 시험 못 함 | PARTIAL | 코드: `onTextEdit` onKey | S |

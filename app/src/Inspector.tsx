@@ -16,6 +16,7 @@ export function Inspector(props: {
   error: string | null;
   comments: Comment[];
   onSelectPath: (path: string) => void;
+  onAskAI?: (c: Comment) => void;
   children?: ReactNode;
 }) {
   const [text, setText] = useState("");
@@ -119,9 +120,16 @@ export function Inspector(props: {
                     <span className="muted">{new Date(c.createdAt).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
                   </div>
                   <div>{c.text}</div>
-                  <button className="link" onClick={() => api.post("/api/comments", { action: "resolve", id: c.id, resolved: !c.resolved })}>
-                    {c.resolved ? "다시 열기" : "해결"}
-                  </button>
+                  <div className="row">
+                    <button className="link" onClick={() => api.post("/api/comments", { action: "resolve", id: c.id, resolved: !c.resolved })}>
+                      {c.resolved ? "다시 열기" : "해결"}
+                    </button>
+                    {!c.resolved && props.onAskAI && (
+                      <button className="link" onClick={() => props.onAskAI!(c)} title="이 댓글 위치만 고쳐 달라고 AI에게 보내기">
+                        AI에게 보내기
+                      </button>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>

@@ -30,7 +30,9 @@ export type ServerEvent =
   | { type: "board-changed"; source: string | null }
   | { type: "selection-changed" }
   | { type: "comments-changed" }
-  | { type: "history-changed" };
+  | { type: "history-changed" }
+  | { type: "errors-changed" }
+  | { type: "chat"; id: string; ev: import("./chat").ChatEvent };
 
 /** 끊기면 1초 뒤 다시 붙는 WS */
 export function connectEvents(onEvent: (e: ServerEvent) => void) {

@@ -51,6 +51,7 @@ export function useEditMode(editFile: string | null, getFrame: (f: string) => HT
           path: primary,
           paths,
           styles: computedStyles(elementAt(doc, primary)!),
+          ...kindLabel(elementAt(doc, primary)!),
         });
         setState((s) => (s.paths === paths || s.paths.join() === paths.join() ? { ...s, selection } : s));
       } catch (e) {
@@ -157,4 +158,26 @@ export function useEditMode(editFile: string | null, getFrame: (f: string) => HT
   }, [editFile, getFrame, select, refresh]);
 
   return { state, select, refresh, setError: (error: string | null) => setState((s) => ({ ...s, error })) };
+}
+
+/** 요소 종류와 사람이 읽는 이름(MCP get_selection의 kind·label) */
+export function kindLabel(el: Element) {
+  const tag = el.tagName.toLowerCase();
+  const role = el.getAttribute("role");
+  const kind =
+    tag === "img" || tag === "picture" || (el as HTMLElement).style?.backgroundImage?.includes("url(")
+      ? "image"
+      : tag === "button" || role === "button"
+        ? "button"
+        : tag === "a"
+          ? "link"
+          : /^(input|textarea|select)$/.test(tag)
+            ? "input"
+            : tag === "svg"
+              ? "icon"
+              : !el.children.length && el.textContent?.trim()
+                ? "text"
+                : "container";
+  const label = (el.getAttribute("aria-label") || el.getAttribute("alt") || el.getAttribute("title") || el.getAttribute("placeholder") || el.textContent || "").trim().replace(/\s+/g, " ").slice(0, 60);
+  return { kind, label };
 }

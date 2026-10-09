@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { api, clientId, connectEvents, type ServerEvent } from "./api";
 import { Canvas, clamp, fitView, isTyping, MAX_ZOOM, MIN_ZOOM, type ContextTarget, type Rect } from "./Canvas";
+import { ChatPanel, type Attach, type ChatEvent } from "./chat";
 import { elementAt, inlineStyles, rectOf } from "./editor";
 import { Icon, type IconName } from "./icons";
 import { Inspector, type Comment } from "./Inspector";
@@ -27,6 +28,14 @@ function loadSaved(title: string): Saved {
     return {};
   }
 }
+
+type BoardError = { kind: string; message: string; line?: number };
+const TEMPLATES = [
+  { id: "blank", label: "빈 보드", size: "390×844", w: 390, h: 844 },
+  { id: "mobile", label: "모바일 화면", size: "390×844", w: 390, h: 844 },
+  { id: "desktop", label: "PC 화면", size: "1440×900", w: 1440, h: 900 },
+  { id: "doc", label: "문서·메모", size: "800×1000", w: 800, h: 1000 },
+] as const;
 
 const TOOLS: { id: Tool; icon: IconName; label: string; key: string }[] = [
   { id: "select", icon: "select", label: "선택", key: "V" },
@@ -55,6 +64,19 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [canvasSize, setCanvasSize] = useState<{ w: number; h: number } | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
+  const [rightTab, setRightTab] = useState<"inspect" | "chat">("inspect");
+  const [chatDraft, setChatDraft] = useState("");
+  const [chatAttach, setChatAttach] = useState<Attach>({ comments: [], refs: [] });
+  const [errors, setErrors] = useState<Record<string, BoardError[]>>({});
+  const chatListeners = useRef(new Set<(id: string, ev: ChatEvent) => void>());
+  const chatSubscribe = useCallback((fn: (id: string, ev: ChatEvent) => void) => {
+    chatListeners.current.add(fn);
+    return () => void chatListeners.current.delete(fn);
+  }, []);
+  const chatInputRef = useRef<HTMLTextAreaElement>(null);
+  const savingRef = useRef(0);
+  /** 아직 board.json에 안 들어온 새 보드로 이동해야 할 때(안 N개 등): 들어오면 이동 */
+  const [locate, setLocate] = useState<string[] | null>(null);
   const restored = useRef(false);
   const frames = useRef(new Map<string, HTMLIFrameElement>());
   const [frameTick, setFrameTick] = useState(0);
@@ -79,12 +101,39 @@ export function App() {
   }, []);
   const loadComments = useCallback(() => api.get<{ comments: Comment[] }>("/api/comments").then((r) => setComments(r.comments)).catch(() => {}), []);
   const loadHistory = useCallback(() => api.get<typeof hist>("/api/history").then(setHist).catch(() => {}), []);
+  const loadErrors = useCallback(() => api.get<{ errors: Record<string, BoardError[]> }>("/api/errors").then((r) => setErrors(r.errors)).catch(() => {}), []);
 
   useEffect(() => {
     void load();
     void loadComments();
     void loadHistory();
-  }, [load, loadComments, loadHistory]);
+    void loadErrors();
+  }, [load, loadComments, loadHistory, loadErrors]);
+
+  // 보드 안 오류 수집: 서버가 화면 HTML에 끼운 스크립트가 보낸다(start → 오류들 → loaded, 그 뒤 생기는 오류는 바로)
+  useEffect(() => {
+    const live = new Map<string, { list: BoardError[]; loaded: boolean; t?: number }>();
+    const flush = (file: string) => {
+      const st = live.get(file)!;
+      window.clearTimeout(st.t);
+      st.t = window.setTimeout(() => void api.put("/api/errors", { file, errors: st.list }).catch(() => {}), 200);
+    };
+    const onMsg = (e: MessageEvent) => {
+      const d = e.data;
+      if (!d || d.type !== "dc-error" || typeof d.file !== "string") return;
+      if (d.start) return void live.set(d.file, { list: [], loaded: false });
+      const st = live.get(d.file) ?? { list: [], loaded: true };
+      live.set(d.file, st);
+      if (d.loaded) {
+        st.loaded = true;
+        return flush(d.file);
+      }
+      if (st.list.length < 20 && !st.list.some((x) => x.message === d.message)) st.list.push({ kind: d.kind, message: d.message, line: d.line });
+      if (st.loaded) flush(d.file);
+    };
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, []);
 
   /* ---------- 저장·실행 취소 ---------- */
   /** 상태를 바꾼다. label이 있으면 바로 저장하고 실행 취소 기록에 남긴다. "draft"는 기록 없이 조금 뒤 저장(글자 입력 중) */
@@ -97,8 +146,18 @@ export function App() {
       setBoard(next);
       if (!label) return;
       if (draftTimer.current) window.clearTimeout(draftTimer.current);
-      const save = () => api.saveBoard(boardRef.current!, label === "draft" ? undefined : label).catch((e) => toast({ tone: "error", text: `저장 실패: ${e.message}` }));
-      if (label === "draft") draftTimer.current = window.setTimeout(save, DRAFT_SAVE_DELAY);
+      const save = () => {
+        savingRef.current++;
+        return api
+          .saveBoard(boardRef.current!, label === "draft" ? undefined : label)
+          .catch((e) => toast({ tone: "error", text: `저장 실패: ${e.message}` }))
+          .finally(() => savingRef.current--);
+      };
+      if (label === "draft")
+        draftTimer.current = window.setTimeout(() => {
+          draftTimer.current = null;
+          void save();
+        }, DRAFT_SAVE_DELAY);
       else void save();
     },
     [toast],
@@ -192,8 +251,10 @@ export function App() {
         } else if (e.type === "board-changed" && e.source !== clientId) void load();
         else if (e.type === "comments-changed") void loadComments();
         else if (e.type === "history-changed") void loadHistory();
+        else if (e.type === "errors-changed") void loadErrors();
+        else if (e.type === "chat") for (const fn of chatListeners.current) fn(e.id, e.ev);
       }),
-    [load, loadComments, loadHistory],
+    [load, loadComments, loadHistory, loadErrors],
   );
 
   /* ---------- 페이지·보이는 것 ---------- */
@@ -232,6 +293,39 @@ export function App() {
     return () => window.clearTimeout(t);
   }, [view, currentPage, leftOpen, minimapOpen, board?.title]);
 
+  // 캔버스 상태를 서버에 알린다(MCP get_selection의 mode·page·visibleArtboards·selectedArtboards·dirty)
+  useEffect(() => {
+    if (!board) return;
+    const t = window.setTimeout(() => {
+      const vx = -view.x / view.zoom;
+      const vy = -view.y / view.zoom;
+      const vw = size.w / view.zoom;
+      const vh = size.h / view.zoom;
+      const visibleArtboards = focusFile ? [focusFile] : visibleBoards.filter((f) => {
+        const b = board.boards[f];
+        return b.x < vx + vw && b.x + b.w > vx && b.y < vy + vh && b.y + b.h > vy;
+      });
+      void api
+        .put("/api/context", {
+          mode: playFile ? "play" : focusFile ? "focus" : editFile ? "edit" : "canvas",
+          page: currentPage,
+          pageName: pages.find((p) => p.id === currentPage)?.name ?? null,
+          visibleArtboards,
+          selectedArtboards: selected,
+          dirty: savingRef.current > 0 || !!draftTimer.current,
+        })
+        .catch(() => {});
+    }, 300);
+    return () => window.clearTimeout(t);
+  }, [view, currentPage, selected, editFile, focusFile, playFile, visibleBoards, size.w, size.h]);
+
+  useEffect(() => {
+    if (!locate || !board || !locate.every((f) => board.boards[f])) return;
+    setSelected(locate);
+    setView(fitView(locate.map((f) => board.boards[f]), size, 80));
+    setLocate(null);
+  }, [locate, board]);
+
   const noteRect = (n: Note) => ({ x: n.x, y: n.y, w: n.w ?? n.maxW ?? 400, h: n.kind === "title" ? 90 : 200 });
   const fitAll = () => {
     if (!board) return;
@@ -257,9 +351,9 @@ export function App() {
   };
   const pageField = () => (pages.length && currentPage ? { page: currentPage } : {});
 
-  const createBoard = async (r: Rect) => {
+  const createBoard = async (r: Partial<Rect>, template = "blank") => {
     try {
-      const { file } = await api.post<{ file: string }>("/api/boards/create", { ...r, ...pageField() });
+      const { file } = await api.post<{ file: string }>("/api/boards/create", { ...r, template, ...pageField() });
       await load();
       setSelected([file]);
       setTool("select");
@@ -335,6 +429,27 @@ export function App() {
       toast({ tone: "error", text: String((e as Error).message) });
     }
   };
+  /** 화면 가운데에 틀에서 새 보드 */
+  const createFromTemplate = (t: (typeof TEMPLATES)[number]) => {
+    const cx = (size.w / 2 - view.x) / view.zoom;
+    const cy = (size.h / 2 - view.y) / view.zoom;
+    void createBoard({ x: Math.round(cx - t.w / 2), y: Math.round(cy - t.h / 2), w: t.w, h: t.h }, t.id).then(() => setView(fitView([{ x: cx - t.w / 2, y: cy - t.h / 2, w: t.w, h: t.h }], size, 80)));
+  };
+  const templateMenu = (at: { clientX: number; clientY: number }) =>
+    setMenu({ x: at.clientX, y: at.clientY, title: "새 보드", items: TEMPLATES.map((t) => ({ label: `${t.label} · ${t.size}`, icon: t.id === "doc" ? ("page" as IconName) : ("board" as IconName), shortcut: t.id === "blank" ? "B로 그리기" : undefined, run: () => createFromTemplate(t) })) });
+  /** 채팅 열기(+ 보낼 말·첨부) */
+  const openChat = (draft?: string, files?: string[]) => {
+    setRightTab("chat");
+    if (files?.length) setSelected(files);
+    if (draft != null) setChatDraft(draft);
+    setTimeout(() => chatInputRef.current?.focus(), 0);
+  };
+  const askFix = (files: string[]) =>
+    openChat(
+      `오류를 고쳐 줘:\n${files.map((f) => `- ${f}: ${(errors[f] ?? [{ message: data?.missing.includes(f) ? "파일이 없어요" : "오류" }])[0].message}`).join("\n")}`,
+      files.filter((f) => board?.boards[f]),
+    );
+
   /** 맨 앞(order 끝)·맨 뒤(order 앞)로 */
   const reorder = (files: string[], to: "front" | "back") =>
     update((b) => {
@@ -420,6 +535,8 @@ export function App() {
       { label: editFile === file ? "편집 끝내기" : "편집", icon: "edit", shortcut: "E", disabled: many, run: () => setEditFile(editFile === file ? null : file) },
       { label: "Play", icon: "play", disabled: many || !b?.is_interactive, run: () => setPlayFile(file) },
       { label: "전체 화면 보기", icon: "focus", shortcut: "F", disabled: many, run: () => setFocusFile(file) },
+      { label: "AI에게 묻기", icon: "comment", shortcut: `${mod}J`, run: () => openChat(undefined, files) },
+      ...(errors[file] || data?.missing.includes(file) ? [{ label: "AI에게 오류 고쳐 달라기", icon: "warn" as IconName, run: () => askFix([file]) }] : []),
       { label: "이 보드로 이동", icon: "fit", shortcut: "⇧2", run: () => goTo(files) },
       "sep",
       { label: "이름 바꾸기", icon: "title", shortcut: "F2", disabled: many, run: () => void renameBoard(file) },
@@ -455,6 +572,7 @@ export function App() {
         y: at.clientY,
         items: [
           { label: "여기에 보드 만들기", icon: "board", shortcut: "B", run: () => void createBoard({ x: Math.round(t.x), y: Math.round(t.y), w: 390, h: 844 }) },
+          { label: "여기에 모바일 화면 틀", icon: "board", run: () => void createBoard({ x: Math.round(t.x), y: Math.round(t.y) }, "mobile") },
           { label: "여기에 제목", icon: "title", shortcut: "T", run: () => createNote("title", t) },
           { label: "여기에 메모", icon: "sticky", shortcut: "N", run: () => createNote("sticky", t) },
           "sep",
@@ -481,6 +599,7 @@ export function App() {
       items: [
         { label: "글자 고치기", icon: "edit", disabled: !el || el.children.length > 0, run: () => el && onTextEdit(el as HTMLElement, path) },
         { label: "부모 선택", icon: "layers", shortcut: "Esc", disabled: up == null, run: () => up != null && void edit.select([up]) },
+        { label: "이 요소를 AI에게", icon: "comment", run: () => openChat() },
         { label: "AI용 설명 복사", icon: "copy", run: () => void navigator.clipboard.writeText(`${editFile} ${path} <${el?.tagName.toLowerCase()}> "${(el?.textContent ?? "").trim().slice(0, 60)}"`).then(() => toast({ tone: "ok", text: "복사했어요" })) },
         "sep",
         { label: "복제", icon: "copy", shortcut: `${mod}D`, run: async () => void doEdit({ op: "duplicate", path, hash: await getHash() }) },
@@ -514,6 +633,7 @@ export function App() {
     };
     if (cmd && k === "z") return run(() => void undoRedo(e.shiftKey ? "redo" : "undo"));
     if (cmd && k === "y") return run(() => void undoRedo("redo"));
+    if (cmd && k === "j") return run(() => (rightTab === "chat" ? setRightTab("inspect") : openChat()));
     if (cmd && k === "k") return run(() => { setLeftOpen(true); setTimeout(() => searchRef.current?.focus(), 0); });
     if (cmd && k === "a" && !editFile) return run(() => select(visibleBoards));
     if (cmd && k === "d" && one && !editFile) return run(() => void duplicateBoard(one));
@@ -610,6 +730,11 @@ export function App() {
     );
 
   const one = selected.length === 1 ? selected[0] : null;
+  const erroredFiles = [...new Set([...data.missing, ...Object.keys(errors)])];
+  const visibleCount = (() => {
+    const vx = -view.x / view.zoom, vy = -view.y / view.zoom, vw = size.w / view.zoom, vh = size.h / view.zoom;
+    return visibleBoards.filter((f) => { const b = board.boards[f]; return b.x < vx + vw && b.x + b.w > vx && b.y < vy + vh && b.y + b.h > vy; }).length;
+  })();
   const rects = visibleBoards.map((f) => ({ file: f, ...board.boards[f] }));
 
   return (
@@ -634,6 +759,9 @@ export function App() {
             <Icon name="redo" />
           </button>
         </div>
+        <button className="new-board" aria-haspopup="menu" title="새 보드(틀 고르기)" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); templateMenu({ clientX: r.left, clientY: r.bottom + 4 }); }}>
+          <Icon name="plus" size={16} /> 새 보드 <Icon name="chevronDown" size={14} />
+        </button>
         {editFile && (
           <span className="editing-chip">
             <Icon name="edit" size={14} /> {board.boards[editFile]?.title ?? editFile} 편집 중
@@ -643,10 +771,27 @@ export function App() {
           </span>
         )}
         <div className="spacer" />
-        {data.missing.length > 0 && (
-          <span className="warn" title={data.missing.join("\n")}>
-            <Icon name="warn" size={14} /> 파일 없는 보드 {data.missing.length}
-          </span>
+        {erroredFiles.length > 0 && (
+          <button
+            className="err-chip"
+            aria-haspopup="menu"
+            title="오류 난 보드"
+            onClick={(e) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              setMenu({
+                x: r.left,
+                y: r.bottom + 4,
+                title: `오류 난 보드 ${erroredFiles.length}`,
+                items: [
+                  ...erroredFiles.slice(0, 12).map((f) => ({ label: `${board.boards[f]?.title ?? f} — ${(errors[f]?.[0]?.message ?? "파일이 없어요").slice(0, 40)}`, icon: "warn" as IconName, run: () => { select([f]); goTo([f]); } })),
+                  "sep" as const,
+                  { label: "AI에게 모두 고쳐 달라기", icon: "comment" as IconName, run: () => askFix(erroredFiles) },
+                ],
+              });
+            }}
+          >
+            <Icon name="warn" size={14} /> 오류 {erroredFiles.length}
+          </button>
         )}
         {error && <span className="warn">{error}</span>}
         <div className="tool-group">
@@ -662,6 +807,9 @@ export function App() {
           <button className="icon-btn" aria-label="전체 보기" title="전체 보기 (⇧1)" onClick={fitAll}>
             <Icon name="fit" />
           </button>
+          <button className={`icon-btn ${rightTab === "chat" ? "on" : ""}`} aria-label="AI 채팅" aria-pressed={rightTab === "chat"} title={`AI 채팅 (${mod}J)`} onClick={() => (rightTab === "chat" ? setRightTab("inspect") : openChat())}>
+            <Icon name="comment" />
+          </button>
           <button className={`icon-btn ${minimapOpen ? "on" : ""}`} aria-label="미니맵" aria-pressed={minimapOpen} title="미니맵 (M)" onClick={() => setMinimapOpen((v) => !v)}>
             <Icon name="map" />
           </button>
@@ -675,7 +823,7 @@ export function App() {
             pages={pages}
             currentPage={currentPage}
             selected={selected}
-            missing={data.missing}
+            missing={erroredFiles}
             onPage={setPage}
             onAddPage={() => void addPage()}
             onPageMenu={pageMenu}
@@ -750,7 +898,36 @@ export function App() {
             <Minimap rects={rects} selected={selected} view={view} size={size} onJump={(x, y) => setView((v) => ({ ...v, x: size.w / 2 - x * v.zoom, y: size.h / 2 - y * v.zoom }))} />
           )}
         </div>
+        <div className="right">
+          <div className="right-tabs" role="tablist" aria-label="오른쪽 패널">
+            <button role="tab" aria-selected={rightTab === "inspect"} className={rightTab === "inspect" ? "on" : ""} onClick={() => setRightTab("inspect")}>
+              속성
+            </button>
+            <button role="tab" aria-selected={rightTab === "chat"} className={rightTab === "chat" ? "on" : ""} onClick={() => openChat()}>
+              AI <kbd>{mod}J</kbd>
+            </button>
+          </div>
+          <div className="chat-wrap" hidden={rightTab !== "chat"}>
+            <ChatPanel
+              selection={editFile && edit.state.selection?.file === editFile ? edit.state.selection : null}
+              boards={editFile ? [editFile] : selected}
+              visibleCount={visibleCount}
+              titleOf={(f) => board.boards[f]?.title ?? f}
+              attach={chatAttach}
+              setAttach={setChatAttach}
+              draft={chatDraft}
+              setDraft={setChatDraft}
+              subscribe={chatSubscribe}
+              onLocate={setLocate}
+              inputRef={chatInputRef}
+            />
+          </div>
+          {rightTab === "inspect" && (
         <Inspector
+          onAskAI={(c) => {
+            setChatAttach((a) => ({ ...a, comments: a.comments.some((x) => x.id === c.id) ? a.comments : [...a.comments, { id: c.id, text: c.text, file: c.file }] }));
+            openChat(chatDraft || "이 댓글대로 그 위치만 고쳐 줘", [c.file]);
+          }}
           file={editFile ?? one}
           editing={!!editFile}
           selection={edit.state.selection}
@@ -833,6 +1010,8 @@ export function App() {
             />
           )}
         </Inspector>
+          )}
+        </div>
       </div>
       {playFile && (
         <Play
