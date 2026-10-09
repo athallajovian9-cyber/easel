@@ -326,6 +326,7 @@ export function boardRoutes() {
         const board0 = await ctx.store.readBoard();
         if (b.action === "add") {
           if (!["title", "sticky"].includes(b.kind)) return sendJson(res, 400, { error: "kind는 title 또는 sticky" });
+          if (Object.keys(board0.notes).length >= 200) return sendJson(res, 400, { error: "메모는 200개까지예요" });
           let id;
           do id = `n${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
           while (board0.notes[id]);

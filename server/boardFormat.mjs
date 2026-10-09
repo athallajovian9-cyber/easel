@@ -3,6 +3,7 @@
 // 두 브랜치에서 서로 다른 보드(이웃한 보드 포함)를 고쳐도 git 병합이 충돌하지 않게 한다(빈 줄이 변경 구간을 떼어 놓음).
 const BOARD_KEYS = ["x", "y", "w", "h", "title", "page"];
 const NOTE_KEYS = ["kind", "x", "y", "w", "h", "maxW", "maxH", "text", "page"];
+const SHAPE_KEYS = ["kind", "x", "y", "w", "h", "points", "page"];
 const TOP_KEYS = ["version", "title", "pages", "launch", "boards", "order", "notes", "shapes", "guides"];
 
 const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
@@ -32,7 +33,8 @@ export function formatBoard(board) {
     let v;
     if (k === "boards") v = objectLines(b.boards, BOARD_KEYS);
     else if (k === "notes") v = objectLines(b.notes, NOTE_KEYS);
-    else if (k === "pages" || k === "order" || k === "shapes") v = arrayLines(b[k]);
+    else if (k === "shapes") v = Array.isArray(b.shapes) ? arrayLines(b.shapes) : objectLines(b.shapes, SHAPE_KEYS);
+    else if (k === "pages" || k === "order") v = arrayLines(b[k]);
     else if (k === "guides") v = objectLines(b.guides);
     else v = line(b[k]);
     return `  ${line(k)}: ${v}`;
