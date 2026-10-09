@@ -261,12 +261,12 @@ function BoardView(props: {
         {!props.exists ? (
           <div className="board-missing">파일 없음</div>
         ) : props.live ? (
-          <iframe
-            key={props.reloadKey}
-            ref={props.iframeRef}
+          <LiveFrame
+            reloadKey={props.reloadKey}
+            iframeRef={props.iframeRef}
             src={`/screens/${props.file}`}
             title={b.title ?? props.file}
-            style={{ pointerEvents: props.editing ? "auto" : "none" }}
+            editing={props.editing}
           />
         ) : (
           <div className="board-placeholder" style={{ fontSize: Math.min(64, 18 / zoom) }}>
@@ -289,6 +289,56 @@ function BoardView(props: {
         onPointerUp={drag.end}
       />
     </div>
+  );
+}
+
+/** 파일이 바뀌면 같은 iframe을 다시 불러오고 스크롤 위치를 되돌린다(PLAN.md 5장 즉시 반영) */
+function LiveFrame(props: { src: string; title: string; reloadKey: number; editing: boolean; iframeRef: (el: HTMLIFrameElement | null) => void }) {
+  const ref = useRef<HTMLIFrameElement | null>(null);
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    const el = ref.current;
+    const win = el?.contentWindow;
+    if (!el || !win) return;
+    const doc = win.document;
+    // 문서 스크롤과 안쪽 스크롤 영역 위치를 기억
+    const scrolls: [string, number, number][] = [];
+    doc.querySelectorAll<HTMLElement>("*").forEach((n, i) => {
+      if (n.scrollTop || n.scrollLeft) scrolls.push([String(i), n.scrollTop, n.scrollLeft]);
+    });
+    const sx = win.scrollX;
+    const sy = win.scrollY;
+    const onLoad = () => {
+      el.removeEventListener("load", onLoad);
+      const w = el.contentWindow!;
+      w.scrollTo(sx, sy);
+      const all = w.document.querySelectorAll<HTMLElement>("*");
+      for (const [i, t, l] of scrolls) {
+        const n = all[Number(i)];
+        if (n) {
+          n.scrollTop = t;
+          n.scrollLeft = l;
+        }
+      }
+      el.dispatchEvent(new CustomEvent("dc-reloaded"));
+    };
+    el.addEventListener("load", onLoad);
+    win.location.reload();
+  }, [props.reloadKey]);
+  return (
+    <iframe
+      ref={(el) => {
+        ref.current = el;
+        props.iframeRef(el);
+      }}
+      src={props.src}
+      title={props.title}
+      style={{ pointerEvents: props.editing ? "auto" : "none" }}
+    />
   );
 }
 
@@ -407,6 +457,9 @@ export function isTyping(e: KeyboardEvent) {
 /** 보드·메모 묶음이 화면에 꽉 차게 */
 export function fitView(rects: { x: number; y: number; w: number; h: number }[], size: { w: number; h: number }, pad = 60): View {
   if (!rects.length) return { x: 0, y: 0, zoom: 1 };
+  // 창이 가려져 캔버스 크기가 0으로 잡힌 경우 창 크기로 대신한다
+  if (size.w < 100 || size.h < 100) size = { w: window.innerWidth, h: Math.max(200, window.innerHeight - 48) };
+  pad = Math.min(pad, size.w * 0.08, size.h * 0.08);
   const minX = Math.min(...rects.map((r) => r.x));
   const minY = Math.min(...rects.map((r) => r.y));
   const maxX = Math.max(...rects.map((r) => r.x + r.w));

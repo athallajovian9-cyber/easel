@@ -30,9 +30,12 @@ export function createBoardStore(dir) {
   }
 
   let writing = Promise.resolve();
+  let lastWritten = null;
   async function writeBoard(board) {
     // 직렬 저장: 동시에 두 요청이 와도 파일이 섞이지 않게 한다
-    writing = writing.then(() => fs.writeFile(boardPath, JSON.stringify(board, null, 1) + "\n", "utf8"));
+    const text = JSON.stringify(board, null, 1) + "\n";
+    lastWritten = text;
+    writing = writing.then(() => fs.writeFile(boardPath, text, "utf8"));
     await writing;
   }
 
@@ -101,5 +104,5 @@ export function createBoardStore(dir) {
     return { board, files, missing, added: changed };
   }
 
-  return { dir, screensDir, boardPath, readBoard, writeBoard, listScreenFiles, syncBoard, readBoardSize };
+  return { dir, screensDir, boardPath, readBoard, writeBoard, listScreenFiles, syncBoard, readBoardSize, lastWritten: () => lastWritten };
 }
