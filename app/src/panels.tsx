@@ -16,11 +16,14 @@ export const LeftPanel = forwardRef<HTMLInputElement, {
   onPage: (id: string) => void;
   onAddPage: () => void;
   onPageMenu: (id: string, e: { clientX: number; clientY: number }) => void;
+  onMovePage?: (id: string, index: number) => void;
   onPick: (file: string, add: boolean) => void;
   onBoardMenu: (file: string, e: { clientX: number; clientY: number }) => void;
   header?: React.ReactNode;
 }>(function LeftPanel(p, searchRef) {
   const [q, setQ] = useState("");
+  const [dragPage, setDragPage] = useState<string | null>(null);
+  const [overPage, setOverPage] = useState<number | null>(null);
   const firstPage = p.pages[0]?.id;
   const list = useMemo(() => {
     const k = q.trim().toLowerCase();
@@ -45,9 +48,32 @@ export const LeftPanel = forwardRef<HTMLInputElement, {
           <p className="empty">한 판으로 보고 있어요. + 로 페이지를 나눌 수 있어요.</p>
         ) : (
           <ul role="tablist" aria-label="페이지">
-            {p.pages.map((pg) => (
-              <li key={pg.id}>
-                <button role="tab" aria-selected={pg.id === p.currentPage} className={`row ${pg.id === p.currentPage ? "on" : ""}`} onClick={() => p.onPage(pg.id)} onContextMenu={(e) => { e.preventDefault(); p.onPageMenu(pg.id, e); }}>
+            {p.pages.map((pg, i) => (
+              <li
+                key={pg.id}
+                draggable={!!p.onMovePage}
+                onDragStart={(e) => {
+                  setDragPage(pg.id);
+                  e.dataTransfer.effectAllowed = "move";
+                }}
+                onDragOver={(e) => {
+                  if (!dragPage) return;
+                  e.preventDefault();
+                  setOverPage(i);
+                }}
+                onDragEnd={() => {
+                  setDragPage(null);
+                  setOverPage(null);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const from = p.pages.findIndex((x) => x.id === dragPage);
+                  if (dragPage && from !== i) p.onMovePage?.(dragPage, i);
+                  setDragPage(null);
+                  setOverPage(null);
+                }}
+              >
+                <button role="tab" title="끌어서 순서 바꾸기 · 우클릭으로 이름·삭제" aria-selected={pg.id === p.currentPage} className={`row ${pg.id === p.currentPage ? "on" : ""} ${overPage === i && dragPage !== pg.id ? "drop-before" : ""}`} onClick={() => p.onPage(pg.id)} onContextMenu={(e) => { e.preventDefault(); p.onPageMenu(pg.id, e); }}>
                   <Icon name="page" size={14} />
                   <span className="row-text">{pg.name}</span>
                   <span className="row-count">{Object.values(p.board.boards).filter((b) => (b.page ?? firstPage) === pg.id).length}</span>

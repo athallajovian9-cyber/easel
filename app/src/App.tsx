@@ -4,10 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { api, clientId, connectEvents, type ServerEvent } from "./api";
 import { Canvas, clamp, fitView, isTyping, MAX_ZOOM, MIN_ZOOM, type ContextTarget, type Rect } from "./Canvas";
-import { AssetGrid, AssetPicker, type Asset } from "./assets";
+import { AssetGrid, AssetPicker, uploadAssets, type Asset } from "./assets";
 import { ChatPanel, type Attach, type ChatEvent } from "./chat";
+import { GuidesEditor, GuidesOverlay, MAX_NOTES, NoteOptions, ShapeDrawer, ShapeOptions, ShapesLayer } from "./drawing";
 import { alignOps, EditHandles, type DropPlan } from "./elementDrag";
-import { elementAt, inlineStyles, rectOf } from "./editor";
+import { elementAt, inlineStyles, pathOf, rectOf } from "./editor";
 import { Icon, type IconName } from "./icons";
 import { Inspector, type Comment } from "./Inspector";
 import { Layers } from "./Layers";
@@ -16,7 +17,7 @@ import { Play } from "./Play";
 import { Properties } from "./Properties";
 import { ContextMenu, Dialog, useDialog, useToast, type MenuItem, type MenuState } from "./ui";
 import { useEditMode } from "./useEditMode";
-import type { Board, BoardItem, BoardResponse, Note, Tool, View } from "./types";
+import type { Board, BoardItem, BoardResponse, LayoutGuide, Note, Shape, ShapeKind, Tool, View } from "./types";
 
 const DRAFT_SAVE_DELAY = 400;
 const mod = navigator.platform.includes("Mac") ? "⌘" : "Ctrl+";
@@ -45,7 +46,14 @@ const TOOLS: { id: Tool; icon: IconName; label: string; key: string }[] = [
   { id: "board", icon: "board", label: "보드 그리기", key: "B" },
   { id: "title", icon: "title", label: "제목", key: "T" },
   { id: "sticky", icon: "sticky", label: "메모", key: "N" },
+  { id: "rect", icon: "rect", label: "사각형", key: "R" },
+  { id: "oval", icon: "oval", label: "타원", key: "O" },
+  { id: "line", icon: "line", label: "선", key: "L" },
+  { id: "arrow", icon: "arrow", label: "화살표", key: "A" },
+  { id: "pen", icon: "pen", label: "펜", key: "P" },
 ];
+const SHAPE_TOOLS: Tool[] = ["rect", "oval", "line", "arrow", "pen"];
+type Theme = "system" | "light" | "dark";
 
 export function App() {
   const [data, setData] = useState<BoardResponse | null>(null);
@@ -80,6 +88,24 @@ export function App() {
   const [leftTab, setLeftTab] = useState<"boards" | "assets">("boards");
   const [assetsVersion, setAssetsVersion] = useState(0);
   const [picker, setPicker] = useState<null | ((a: Asset) => void)>(null);
+  const [selectedShape, setSelectedShape] = useState<string | null>(null);
+  const [guidesOn, setGuidesOn] = useState(true);
+  const [theme, setTheme] = useState<Theme>(() => {
+    try {
+      return (localStorage.getItem("design-canvas:theme") as Theme) || "system";
+    } catch {
+      return "system";
+    }
+  });
+  useEffect(() => {
+    if (theme === "system") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", theme);
+    try {
+      localStorage.setItem("design-canvas:theme", theme);
+    } catch {
+      /* 무시 */
+    }
+  }, [theme]);
   /** 아직 board.json에 안 들어온 새 보드로 이동해야 할 때(안 N개 등): 들어오면 이동 */
   const [locate, setLocate] = useState<string[] | null>(null);
   const restored = useRef(false);
@@ -426,6 +452,7 @@ export function App() {
   const select = (files: string[], m: "replace" | "toggle" | "add" = "replace") => {
     setSelected((cur) => (m === "replace" ? files : m === "add" ? [...new Set([...cur, ...files])] : files.reduce((a, f) => (a.includes(f) ? a.filter((x) => x !== f) : [...a, f]), cur)));
     if (files.length) setSelectedNote(null);
+    setSelectedShape(null);
   };
   const pageField = () => (pages.length && currentPage ? { page: currentPage } : {});
 
@@ -555,6 +582,7 @@ export function App() {
     return id;
   };
   const createNote = (kind: Note["kind"], at: { x: number; y: number }) => {
+    if (Object.keys(boardRef.current?.notes ?? {}).length >= MAX_NOTES) return toast({ tone: "error", text: `메모는 ${MAX_NOTES}개까지예요` });
     const id = newNoteId();
     const x = Math.round(at.x);
     const y = Math.round(at.y);
@@ -579,30 +607,119 @@ export function App() {
   };
 
   /* ---------- 페이지 ---------- */
+  /* ---------- 도형 ---------- */
+  const shapes = board?.shapes ?? {};
+  const visibleShapes = useMemo(
+    () => Object.keys(shapes).filter((id) => onPage(shapes[id])).sort((a, b) => (shapes[a].z ?? 0) - (shapes[b].z ?? 0) || (a < b ? -1 : 1)),
+    [shapes, onPage],
+  );
+  const addShape = (sh: Shape, label = "도형 추가") => {
+    let id = "";
+    do id = `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    while (boardRef.current?.shapes?.[id]);
+    const z = Math.max(0, ...Object.values(boardRef.current?.shapes ?? {}).map((x) => x.z ?? 0)) + 1;
+    update((b) => ({ ...b, shapes: { ...(b.shapes ?? {}), [id]: { ...sh, z, ...pageField() } } }), label);
+    setSelectedShape(id);
+    setSelected([]);
+    setSelectedNote(null);
+    setTool("select");
+    return id;
+  };
+  const patchShape = (id: string, patch: Partial<Shape>, label?: string) => update((b) => ({ ...b, shapes: { ...(b.shapes ?? {}), [id]: { ...b.shapes![id], ...patch } } }), label);
+  const deleteShape = (id: string) => {
+    update((b) => {
+      const { [id]: _, ...rest } = b.shapes ?? {};
+      return { ...b, shapes: rest };
+    }, "도형 삭제");
+    setSelectedShape(null);
+    toast({ text: "도형을 지웠어요", action: undoAction });
+  };
+  const shapeZ = (id: string, to: "front" | "back") => {
+    const zs = Object.values(boardRef.current?.shapes ?? {}).map((x) => x.z ?? 0);
+    patchShape(id, { z: to === "front" ? Math.max(0, ...zs) + 1 : Math.min(0, ...zs) - 1 }, to === "front" ? "도형 맨 앞으로" : "도형 맨 뒤로");
+  };
+  /** 이미지 도형: 자산에서 고르거나 붙여넣은 그림 */
+  const addImageShape = (a: { ref: string; url: string }, at?: { x: number; y: number }) => {
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, 600 / Math.max(img.naturalWidth, img.naturalHeight));
+      const w = Math.round(img.naturalWidth * k) || 300;
+      const h = Math.round(img.naturalHeight * k) || 200;
+      const c = at ?? { x: (size.w / 2 - view.x) / view.zoom - w / 2, y: (size.h / 2 - view.y) / view.zoom - h / 2 };
+      addShape({ kind: "image", x: Math.round(c.x), y: Math.round(c.y), w, h, src: a.ref }, "이미지 추가");
+    };
+    img.onerror = () => toast({ tone: "error", text: "이미지를 읽지 못했어요" });
+    img.src = a.url;
+  };
+  // 캔버스에 이미지를 붙여넣으면 자산으로 올리고 이미지 도형으로
+  useEffect(() => {
+    const onPaste = async (e: ClipboardEvent) => {
+      if (editFile || (e.target as HTMLElement)?.closest?.("input,textarea,[contenteditable=true]")) return;
+      const files = Array.from(e.clipboardData?.files ?? []).filter((f) => f.type.startsWith("image/"));
+      if (!files.length) return;
+      e.preventDefault();
+      try {
+        const [a] = await uploadAssets(files.map((f) => (f.name ? f : new File([f], "붙여넣은-이미지.png", { type: f.type }))));
+        addImageShape(a);
+      } catch (err) {
+        toast({ tone: "error", text: String((err as Error).message) });
+      }
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  });
+
+  /* ---------- 페이지(서버 기록) ---------- */
+  const pageApi = async (body: Record<string, unknown>, okText?: string) => {
+    try {
+      const r = await api.post<{ id?: string }>("/api/pages", body);
+      await load();
+      if (okText) toast({ tone: "ok", text: okText, action: undoAction });
+      return r;
+    } catch (e) {
+      toast({ tone: "error", text: String((e as Error).message) });
+      return null;
+    }
+  };
+
   const addPage = async () => {
+    if (pages.length >= 40) return toast({ tone: "error", text: "페이지는 40개까지예요" });
     const r = await ask.prompt({ title: "새 페이지", label: "이름", value: `페이지 ${Math.max(pages.length, 1) + 1}`, ok: "만들기" });
     if (!r?.value.trim()) return;
-    const id = `p${Date.now().toString(36)}`;
-    // 첫 페이지를 만들면 지금 보드·메모는 모두 '기본' 페이지에 남는다(page 없는 항목 = 첫 페이지)
-    update((b) => ({ ...b, pages: b.pages.length ? [...b.pages, { id, name: r.value.trim() }] : [{ id: "main", name: "기본" }, { id, name: r.value.trim() }] }), "페이지 추가");
-    setPage(id);
+    const res = await pageApi({ action: "add", name: r.value.trim() });
+    if (res?.id) setPage(res.id);
   };
   const renamePage = async (id: string) => {
     const p = pages.find((x) => x.id === id);
     const r = await ask.prompt({ title: "페이지 이름 바꾸기", label: "이름", value: p?.name ?? "", ok: "바꾸기" });
-    if (!r?.value.trim()) return;
-    update((b) => ({ ...b, pages: b.pages.map((x) => (x.id === id ? { ...x, name: r.value.trim() } : x)) }), "페이지 이름 바꾸기");
+    if (!r?.value.trim() || r.value.trim() === p?.name) return;
+    await pageApi({ action: "rename", id, name: r.value.trim() });
   };
-  const pageMenu = (id: string, at: { clientX: number; clientY: number }) =>
+  const deletePage = async (id: string) => {
+    const p = pages.find((x) => x.id === id);
+    const n = Object.values(board?.boards ?? {}).filter((b) => (b.page ?? pages[0]?.id) === id).length;
+    if (!(await ask.confirm({ title: `"${p?.name}" 페이지를 지울까요?`, body: `이 페이지의 보드 ${n}개와 메모는 지워지지 않고 첫 페이지로 옮겨져요. 실행 취소(⌘Z)로 되돌릴 수 있어요.`, ok: "지우기", danger: true }))) return;
+    if (currentPage === id) setPage(null);
+    await pageApi({ action: "delete", id }, "페이지를 지웠어요");
+  };
+  const movePage = (id: string, index: number) => void pageApi({ action: "move", id, index });
+  const pageMenu = (id: string, at: { clientX: number; clientY: number }) => {
+    const i = pages.findIndex((p) => p.id === id);
     setMenu({
       x: at.clientX,
       y: at.clientY,
-      title: pages.find((p) => p.id === id)?.name,
+      title: pages[i]?.name,
       items: [
         { label: "이름 바꾸기", icon: "edit", run: () => void renamePage(id) },
-        ...(selected.length ? [{ label: `선택한 보드 ${selected.length}개를 이 페이지로`, icon: "page" as IconName, run: () => update((b) => ({ ...b, boards: { ...b.boards, ...Object.fromEntries(selected.map((f) => [f, { ...b.boards[f], page: id }])) } }), "페이지로 옮기기") }] : []),
+        { label: "위로", icon: "chevronDown", disabled: i <= 0, run: () => movePage(id, i - 1) },
+        { label: "아래로", icon: "chevronDown", disabled: i >= pages.length - 1, run: () => movePage(id, i + 1) },
+        { label: board?.launch?.page === id ? "시작 페이지 해제" : "시작 페이지로", icon: "page", run: () => update((b) => ({ ...b, launch: { ...(b.launch ?? { view: "canvas" }), page: b.launch?.page === id ? undefined : id } }), "시작 페이지") },
+        ...(selected.length ? [{ label: `선택한 보드 ${selected.length}개를 이 페이지로`, icon: "page" as IconName, run: () => update((b) => ({ ...b, boards: { ...b.boards, ...Object.fromEntries(selected.map((f) => [f, { ...b.boards[f], page: id === pages[0]?.id ? undefined : id }])) } }), "페이지로 옮기기") }] : []),
+        "sep",
+        { label: "삭제", icon: "trash", danger: true, disabled: pages.length <= 1, run: () => void deletePage(id) },
       ],
     });
+  };
 
   /* ---------- 우클릭 메뉴 ---------- */
   const boardMenuItems = (file: string): MenuItem[] => {
@@ -700,6 +817,32 @@ export function App() {
     });
   };
 
+  /** ⌘\: 양쪽 패널 함께 숨기기·보이기 */
+  const [rightOpen, setRightOpen] = useState(true);
+  const toggleUi = () => {
+    const hide = leftOpen || rightOpen;
+    setLeftOpen(!hide);
+    setRightOpen(!hide);
+  };
+  /** F6: 도구 막대 → 왼쪽 패널 → 캔버스 → 오른쪽 패널 사이 포커스 옮기기 */
+  const cycleFocus = (back: boolean) => {
+    const regions = [".toolbar", ".left", ".canvas", ".right"].map((q) => document.querySelector<HTMLElement>(q)).filter(Boolean) as HTMLElement[];
+    const cur = regions.findIndex((r) => r.contains(document.activeElement));
+    const next = regions[(cur + (back ? -1 : 1) + regions.length) % regions.length];
+    const target = next.matches(".canvas") ? next : next.querySelector<HTMLElement>("button:not([disabled]), input, select, textarea, [tabindex]");
+    if (next.matches(".canvas")) next.tabIndex = -1;
+    (target ?? next).focus();
+  };
+  const wrapSelected = async (display: "flex" | "grid") => {
+    if (!editFile) return;
+    const ordered = [...edit.state.paths].sort((a, b) => Number(a.split("/").pop()) - Number(b.split("/").pop()));
+    const hashes = await Promise.all(ordered.map((p) => hashOf(editFile, p)));
+    if (await doEdit({ op: "wrap", paths: ordered, hashes, display })) {
+      void edit.select([ordered[0]]);
+      toast({ tone: "ok", text: `${display}로 감쌌어요`, action: undoAction });
+    }
+  };
+
   /* ---------- 단축키 ---------- */
   const keyRef = useRef<(e: KeyboardEvent) => void>(() => {});
   keyRef.current = (e: KeyboardEvent) => {
@@ -730,7 +873,9 @@ export function App() {
     if (cmd && e.key === "1") return run(fitAll);
     if (cmd && (e.key === "=" || e.key === "+")) return run(() => zoomBy(1.25));
     if (cmd && e.key === "-") return run(() => zoomBy(0.8));
-    if (cmd && e.key === "\\") return run(() => setLeftOpen((v) => !v));
+    if (cmd && e.key === "\\") return run(() => toggleUi());
+    if (e.ctrlKey && !e.metaKey && k === "g") return run(() => setGuidesOn((v) => !v));
+    if (cmd && k === "g" && editFile && edit.state.paths.length >= 2) return run(() => void wrapSelected("flex"));
     if (cmd) return;
     if (e.shiftKey && e.code === "Digit1") return run(fitAll);
     if (e.shiftKey && e.code === "Digit2") return run(() => goTo(selected));
@@ -739,8 +884,11 @@ export function App() {
       if (tool !== "select") return run(() => setTool("select"));
       setSelected([]);
       setSelectedNote(null);
+      setSelectedShape(null);
       return;
     }
+    if (e.key === "F6") return run(() => cycleFocus(e.shiftKey));
+    if ((e.key === "Delete" || e.key === "Backspace") && selectedShape && !editFile) return run(() => deleteShape(selectedShape));
     if (e.key === "Delete" || e.key === "Backspace") {
       if (editFile && edit.state.selection) {
         const sel = edit.state.selection;
@@ -755,8 +903,37 @@ export function App() {
       if (selected.length && !editFile) return run(() => void deleteBoards(selected));
       return;
     }
+    // 편집 중 화살표: 형제·부모·자식으로 선택 옮기기, Alt+↑↓는 형제 사이 순서 바꾸기
+    if (e.key.startsWith("Arrow") && editFile && edit.state.selection) {
+      const sel = edit.state.selection;
+      const doc = frames.current.get(editFile)?.contentDocument;
+      const el = doc && elementAt(doc, sel.path);
+      if (!el) return;
+      if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+        const parent = sel.path.includes("/") ? sel.path.slice(0, sel.path.lastIndexOf("/")) : "";
+        const i = Number(sel.path.split("/").pop());
+        const to = e.key === "ArrowUp" ? i - 1 : i + 1;
+        if (to < 0 || to >= (el.parentElement?.children.length ?? 0)) return run(() => {});
+        return run(() => void moveElement(sel.path, { toParentPath: parent, index: to, freeze: [] }));
+      }
+      const next = e.key === "ArrowDown" || e.key === "ArrowRight" ? el.nextElementSibling : el.previousElementSibling;
+      const target = e.key === "ArrowLeft" && e.shiftKey ? el.parentElement : e.key === "ArrowRight" && e.shiftKey ? el.firstElementChild : next;
+      if (target && target !== doc.body) {
+        const tp = pathOf(target);
+        if (tp != null) return run(() => void edit.select([tp]));
+      }
+      return run(() => {});
+    }
+    if (e.key.startsWith("Arrow") && !editFile && (selectedShape || selectedNote)) {
+      const d = e.altKey ? 100 : e.shiftKey ? 10 : 1;
+      const dx = e.key === "ArrowLeft" ? -d : e.key === "ArrowRight" ? d : 0;
+      const dy = e.key === "ArrowUp" ? -d : e.key === "ArrowDown" ? d : 0;
+      if (selectedShape) return run(() => patchShape(selectedShape, { x: shapes[selectedShape].x + dx, y: shapes[selectedShape].y + dy }, "도형 옮기기"));
+      const n = board.notes[selectedNote!];
+      return run(() => update((b) => ({ ...b, notes: { ...b.notes, [selectedNote!]: { ...n, x: n.x + dx, y: n.y + dy } } }), "메모 옮기기"));
+    }
     if (e.key.startsWith("Arrow") && selected.length && !editFile) {
-      const d = e.shiftKey ? 10 : 1;
+      const d = e.altKey ? 100 : e.shiftKey ? 10 : 1;
       return run(() => nudge(e.key === "ArrowLeft" ? -d : e.key === "ArrowRight" ? d : 0, e.key === "ArrowUp" ? -d : e.key === "ArrowDown" ? d : 0));
     }
     if (e.key === "F2" && one) return run(() => void renameBoard(one));
@@ -777,9 +954,11 @@ export function App() {
     const pins = comments.filter((c) => c.file === f && !c.resolved);
     const doc = frames.current.get(f)?.contentDocument;
     const editing = editFile === f;
-    if (!editing && !pins.length) return null;
+    const lg = guidesOn ? (board?.guides?.[f] ?? []).filter((g) => !g.hidden) : [];
+    if (!editing && !pins.length && !lg.length) return null;
     return (
       <div className="overlay">
+        {lg.length > 0 && board && <GuidesOverlay guides={lg} w={board.boards[f].w} h={board.boards[f].h} />}
         {editing && edit.state.hover && !edit.state.paths.includes(edit.state.hover.path) && <Box r={edit.state.hover.rect} cls="hover" />}
         {editing && edit.state.rects.map((r, i) => <Box key={i} r={r} cls="sel" />)}
         {editing && doc && edit.state.paths.length === 1 && edit.state.rects[0] && (
@@ -861,11 +1040,21 @@ export function App() {
         </button>
         <strong className="app-title">{board.title}</strong>
         <div className="tool-group" role="radiogroup" aria-label="캔버스 도구">
-          {TOOLS.map((t) => (
+          {TOOLS.slice(0, 5).map((t) => (
             <button key={t.id} role="radio" aria-checked={tool === t.id} aria-label={`${t.label} (${t.key})`} title={`${t.label} (${t.key})`} className={`icon-btn ${tool === t.id ? "on" : ""}`} disabled={!!editFile && t.id !== "select" && t.id !== "hand"} onClick={() => setTool(t.id)}>
               <Icon name={t.icon} />
             </button>
           ))}
+        </div>
+        <div className="tool-group" role="radiogroup" aria-label="도형">
+          {TOOLS.slice(5).map((t) => (
+            <button key={t.id} role="radio" aria-checked={tool === t.id} aria-label={`${t.label} (${t.key})`} title={`${t.label} (${t.key}) · Shift로 정사각·정원`} className={`icon-btn ${tool === t.id ? "on" : ""}`} disabled={!!editFile} onClick={() => setTool(t.id)}>
+              <Icon name={t.icon} />
+            </button>
+          ))}
+          <button className="icon-btn" aria-label="이미지 넣기" title="이미지 넣기(캔버스에 붙여넣기도 돼요)" disabled={!!editFile} onClick={() => setPicker(() => (a: Asset) => { setPicker(null); addImageShape(a); })}>
+            <Icon name="image" />
+          </button>
         </div>
         <div className="tool-group">
           <button className="icon-btn" aria-label="실행 취소" title={hist.undo.length ? `실행 취소: ${hist.undo[hist.undo.length - 1]} (${mod}Z)` : `실행 취소 (${mod}Z)`} disabled={!hist.canUndo} onClick={() => void undoRedo("undo")}>
@@ -926,6 +1115,17 @@ export function App() {
           <button className={`icon-btn ${rightTab === "chat" ? "on" : ""}`} aria-label="AI 채팅" aria-pressed={rightTab === "chat"} title={`AI 채팅 (${mod}J)`} onClick={() => (rightTab === "chat" ? setRightTab("inspect") : openChat())}>
             <Icon name="comment" />
           </button>
+          <button className={`icon-btn ${guidesOn ? "on" : ""}`} aria-label="레이아웃 가이드 보기" aria-pressed={guidesOn} title="레이아웃 가이드 보기 (⌃G)" onClick={() => setGuidesOn((v) => !v)}>
+            <Icon name="grid" />
+          </button>
+          <button
+            className="icon-btn"
+            aria-label={`화면 모드: ${theme === "system" ? "시스템" : theme === "light" ? "밝게" : "어둡게"}`}
+            title={`화면 모드: ${theme === "system" ? "시스템 따라" : theme === "light" ? "밝게" : "어둡게"} (누르면 바꿈)`}
+            onClick={() => setTheme((t) => (t === "system" ? "light" : t === "light" ? "dark" : "system"))}
+          >
+            <Icon name={theme === "system" ? "system" : theme === "light" ? "sun" : "moon"} />
+          </button>
           <button className={`icon-btn ${minimapOpen ? "on" : ""}`} aria-label="미니맵" aria-pressed={minimapOpen} title="미니맵 (M)" onClick={() => setMinimapOpen((v) => !v)}>
             <Icon name="map" />
           </button>
@@ -950,6 +1150,7 @@ export function App() {
             onPage={setPage}
             onAddPage={() => void addPage()}
             onPageMenu={pageMenu}
+            onMovePage={movePage}
             onPick={(f, add) => {
               const b = board.boards[f];
               if (pages.length && b && (b.page ?? pages[0].id) !== currentPage) setPage(b.page ?? pages[0].id);
@@ -981,6 +1182,7 @@ export function App() {
             onSelectNote={(id) => {
               setSelectedNote(id);
               if (id) setSelected([]);
+              setSelectedShape(null);
             }}
             onMoveBoards={(patches, done) =>
               update(
@@ -1001,6 +1203,34 @@ export function App() {
             onContext={onContext}
             onSize={setCanvasSize}
             renderBoardOverlay={renderOverlay}
+            worldLayer={
+              <ShapesLayer
+                shapes={shapes}
+                ids={visibleShapes}
+                zoom={view.zoom}
+                selected={selectedShape}
+                interactive={tool === "select" && !editFile}
+                onSelect={(id) => {
+                  setSelectedShape(id);
+                  setSelected([]);
+                  setSelectedNote(null);
+                }}
+                onChange={(id, patch, done) => patchShape(id, patch, done ? (patch.w != null ? "도형 크기" : "도형 옮기기") : undefined)}
+                onContext={(id, at) =>
+                  setMenu({
+                    x: at.clientX,
+                    y: at.clientY,
+                    title: "도형",
+                    items: [
+                      { label: "맨 앞으로", icon: "front", shortcut: `${mod}]`, run: () => shapeZ(id, "front") },
+                      { label: "맨 뒤로", icon: "back", shortcut: `${mod}[`, run: () => shapeZ(id, "back") },
+                      "sep",
+                      { label: "삭제", icon: "trash", shortcut: "⌫", danger: true, run: () => deleteShape(id) },
+                    ],
+                  })
+                }
+              />
+            }
             iframeRef={(f, el) => {
               // ref 콜백은 렌더마다 null → el로 다시 불린다. 정말 새 iframe일 때만 갱신한다
               if (el && frames.current.get(f) !== el) {
@@ -1009,7 +1239,8 @@ export function App() {
               }
             }}
           />
-          {visibleBoards.length === 0 && visibleNotes.length === 0 && (
+          {SHAPE_TOOLS.includes(tool) && !editFile && <ShapeDrawer tool={tool as ShapeKind} view={view} onDone={(sh) => addShape(sh)} />}
+          {visibleBoards.length === 0 && visibleNotes.length === 0 && visibleShapes.length === 0 && (
             <div className="canvas-empty">
               <Icon name="board" size={32} />
               <p>이 페이지는 비어 있어요</p>
@@ -1022,7 +1253,7 @@ export function App() {
             <Minimap rects={rects} selected={selected} view={view} size={size} onJump={(x, y) => setView((v) => ({ ...v, x: size.w / 2 - x * v.zoom, y: size.h / 2 - y * v.zoom }))} />
           )}
         </div>
-        <div className="right">
+        <div className="right" hidden={!rightOpen}>
           <div className="right-tabs" role="tablist" aria-label="오른쪽 패널">
             <button role="tab" aria-selected={rightTab === "inspect"} className={rightTab === "inspect" ? "on" : ""} onClick={() => setRightTab("inspect")}>
               속성
@@ -1060,6 +1291,28 @@ export function App() {
           comments={comments}
           onSelectPath={(p) => editFile && void edit.select([p])}
         >
+          {!editFile && selectedShape && shapes[selectedShape] && (
+            <ShapeOptions shape={shapes[selectedShape]} onPatch={(pt) => patchShape(selectedShape, pt, "도형 모양")} onDelete={() => deleteShape(selectedShape)} onFront={() => shapeZ(selectedShape, "front")} onBack={() => shapeZ(selectedShape, "back")} />
+          )}
+          {!editFile && selectedNote && board.notes[selectedNote] && (
+            <NoteOptions
+              note={board.notes[selectedNote]}
+              onPatch={(pt) =>
+                update((b) => {
+                  const n: Note = { ...b.notes[selectedNote], ...pt };
+                  for (const k of Object.keys(n) as (keyof Note)[]) if (n[k] === undefined) delete n[k];
+                  return { ...b, notes: { ...b.notes, [selectedNote]: n } };
+                }, "메모 모양")
+              }
+              onDelete={() => deleteNote(selectedNote)}
+            />
+          )}
+          {!editFile && one && board.boards[one] && (
+            <GuidesEditor
+              guides={board.guides?.[one] ?? []}
+              onChange={(g: LayoutGuide[], label) => update((b) => ({ ...b, guides: { ...(b.guides ?? {}), [one]: g } }), label)}
+            />
+          )}
           {!editFile && one && board.boards[one] && (
             <BoardOptions
               file={one}

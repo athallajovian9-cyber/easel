@@ -2,6 +2,7 @@
 // 무한 캔버스: 도구(선택·손·보드·제목·메모), 이동·확대, 다중 선택·함께 옮기기·스냅 안내선, 보드(iframe)·이름표·크기, 메모. PLAN.md 5장.
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as RMouseEvent, type PointerEvent as RPointerEvent, type ReactNode } from "react";
 
+import { stickyBg } from "./drawing";
 import { Icon } from "./icons";
 import type { Board, BoardItem, Note, Tool, View } from "./types";
 
@@ -42,6 +43,8 @@ type Props = {
   onCreateNote: (kind: Note["kind"], at: { x: number; y: number }) => void;
   onContext: (t: ContextTarget, e: { clientX: number; clientY: number }) => void;
   renderBoardOverlay?: (f: string) => ReactNode;
+  /** 보드 위에 그리는 것(도형) — world 좌표 */
+  worldLayer?: ReactNode;
   iframeRef?: (f: string, el: HTMLIFrameElement | null) => void;
   onSize?: (s: { w: number; h: number }) => void;
 };
@@ -297,6 +300,7 @@ export function Canvas(p: Props) {
             />
           );
         })}
+        {p.worldLayer}
         {guides.map((g, i) =>
           g.axis === "x" ? (
             <div key={i} className="guide" style={{ left: g.at, top: g.from, width: 1 / view.zoom, height: g.to - g.from }} />
@@ -504,7 +508,28 @@ function NoteView(props: { note: Note; zoom: number; selected: boolean; onSelect
     const text = el.innerText;
     if (text !== n.text) props.onMove({ text }, true);
   };
-  const style = n.kind === "title" ? { left: n.x, top: n.y, maxWidth: n.maxW ?? 4000 } : { left: n.x, top: n.y, width: n.w ?? 320 };
+  // 제목: maxW·maxH를 넘으면 글자를 줄인다(최소 12px)
+  const base = n.size ?? (n.kind === "title" ? 72 : 22);
+  const [fs, setFs] = useState(base);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || n.kind !== "title" || editing) return setFs(base);
+    let f = base;
+    el.style.fontSize = `${f}px`;
+    const maxW = n.maxW ?? 4000;
+    const maxH = n.maxH || Infinity;
+    for (let i = 0; i < 40 && f > 12 && (el.scrollWidth > maxW + 1 || el.scrollHeight > maxH + 1); i++) {
+      f = Math.max(12, Math.floor(f * 0.92));
+      el.style.fontSize = `${f}px`;
+    }
+    setFs(f);
+  }, [n.text, base, n.maxW, n.maxH, n.kind, editing]);
+  const resize = useDrag(props.zoom);
+  const style =
+    n.kind === "title"
+      ? { left: n.x, top: n.y, maxWidth: n.maxW ?? 4000, maxHeight: n.maxH || undefined }
+      : { left: n.x, top: n.y, width: n.w ?? 320, height: n.h || undefined, background: stickyBg(n.color) };
+  const textStyle = { fontSize: fs, fontWeight: n.bold ?? n.kind === "title" ? 700 : 400, fontStyle: n.italic ? "italic" : undefined };
   return (
     <div
       className={`note note-${n.kind} ${props.selected ? "selected" : ""}`}
@@ -531,6 +556,7 @@ function NoteView(props: { note: Note; zoom: number; selected: boolean; onSelect
       <div
         ref={ref}
         className="note-text"
+        style={textStyle}
         contentEditable={editing}
         suppressContentEditableWarning
         onCompositionStart={() => (composing.current = true)}
@@ -553,6 +579,26 @@ function NoteView(props: { note: Note; zoom: number; selected: boolean; onSelect
       >
         {n.text}
       </div>
+      {props.selected && !editing && (
+        <div
+          className="note-resize"
+          role="slider"
+          aria-label={n.kind === "title" ? "최대 너비" : "포스트잇 크기"}
+          style={{ width: 12 / props.zoom, height: 12 / props.zoom, right: -6 / props.zoom, bottom: -6 / props.zoom, borderWidth: 1.5 / props.zoom }}
+          onPointerDown={(e) => {
+            if (e.button !== 0) return;
+            e.stopPropagation();
+            const el = (e.currentTarget.parentElement as HTMLElement).getBoundingClientRect();
+            const w0 = el.width / props.zoom;
+            const h0 = el.height / props.zoom;
+            resize.start(e, { x: w0, y: h0 }, (d, done) =>
+              props.onMove(n.kind === "title" ? { maxW: Math.max(80, Math.round(d.x)) } : { w: Math.max(80, Math.round(d.x)), h: Math.max(60, Math.round(d.y)) }, done),
+            );
+          }}
+          onPointerMove={resize.move}
+          onPointerUp={resize.end}
+        />
+      )}
       {props.selected && !editing && (
         <button className="note-del icon-btn" aria-label="메모 삭제" style={{ transform: `scale(${1 / props.zoom})` }} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); props.onDelete(); }}>
           <Icon name="close" size={14} />

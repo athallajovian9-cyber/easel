@@ -34,6 +34,14 @@ const P: Record<string, string> = {
   panel: "M4 5h16v14H4zM15 5v14",
   check: "M5 12l5 5 9-10",
   warn: "M12 4l9 16H3zM12 10v4M12 17h.01",
+  rect: "M4 6h16v12H4z",
+  oval: "M12 19c4.4 0 8-3.1 8-7s-3.6-7-8-7-8 3.1-8 7 3.6 7 8 7z",
+  line: "M5 19L19 5",
+  arrow: "M5 19L19 5M10 5h9v9",
+  pen: "M4 20l1-4L16.5 4.5l3 3L8 19zM14 7l3 3",
+  image: "M4 5h16v14H4zM4 15l4-4 4 4 3-3 5 5M15 9h.01",
+  grid: "M4 4h16v16H4zM4 12h16M12 4v16",
+  system: "M4 5h16v11H4zM9 20h6M12 16v4",
   link: "M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1",
 };
 

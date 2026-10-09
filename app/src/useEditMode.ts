@@ -127,7 +127,8 @@ export function useEditMode(editFile: string | null, getFrame: (f: string) => HT
           }
         }
         // 나머지 단축키는 앱 창으로 넘긴다(⌘Z 등)
-        window.dispatchEvent(new KeyboardEvent("keydown", { key: e.key, code: e.code, metaKey: e.metaKey, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey }));
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: e.key, code: e.code, metaKey: e.metaKey, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey, altKey: e.altKey }));
+        if (/^(Arrow|Delete|Backspace)/.test(e.key) || ((e.metaKey || e.ctrlKey) && /^[zydcvg]$/i.test(e.key))) e.preventDefault();
       };
       const onScroll = () => refresh();
       doc.addEventListener("mousemove", onMove, true);

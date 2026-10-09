@@ -17,9 +17,9 @@
 
 | 판정 | 개수 |
 | --- | --- |
-| PASS | 42 |
-| PARTIAL | 19 |
-| MISSING | 10 |
+| PASS | 51 |
+| PARTIAL | 12 |
+| MISSING | 8 |
 | N/A | 3 |
 | 합계 | 74 |
 
@@ -44,17 +44,17 @@
 | 3 | A 캔버스 | 보드 이동·크기(40~8000), 다중 선택·이동, 스냅·가이드선 | 모두 됨 | 이동·크기(40~8000), 빈 곳 끌어 영역 선택·Shift 추가, 함께 옮기기, 다른 보드의 왼·가운데·오른쪽(위·가운데·아래)에 6px 스냅+안내선(Alt로 끔), 화살표 1·Shift 10 이동 | PASS | ux 스크립트: 끄는 중 .guide 2개, .out/ux/p1-03-multi.png·p1-03-snap-guides.png — 선택·호버 상태 구분, 안내선 accent 1px | M |
 | 4 | A 캔버스 | 보드 순서(앞뒤 겹침) | 앞으로·뒤로 보내기 | 맨 앞(⌘])·맨 뒤(⌘[)로 order 바꿈, 우클릭·보드 옵션·여러 개 선택 패널에서도 | PASS | 우클릭 메뉴 단축키 표시 .out/ux/p1-65-menu-board.png, 기록 라벨 '맨 앞으로' | S |
 | 5 | A 캔버스 | title 없으면 파일명 | 파일명 표시 | `b.title ?? 파일` 표시. 새 파일은 파일 이름(확장자 뺌)이 제목으로 기록됨 | PASS | `A5.label_for_new_file`="zz-parity-new" | S |
-| 6 | A 캔버스 | 페이지 40개·추가·이름·삭제·순서·이동·launch.page | 모두 됨 | 추가·이름 변경은 앱 안 입력 창(prompt 없음), 페이지 우클릭으로 선택 보드 옮기기. 삭제·순서 변경·개수 제한은 P4 | PARTIAL | 코드: `addPage`, `renamePage`, `pageMenu` | S |
+| 6 | A 캔버스 | 페이지 40개·추가·이름·삭제·순서·이동·launch.page | 모두 됨 | 페이지 추가(40개까지)·이름(앱 안 입력)·삭제(확인, 항목은 첫 페이지로)·순서(끌어 놓기·우클릭 위로/아래로)·보드 옮기기·시작 페이지(launch.page). 모두 서버 /api/pages로 실행 취소 기록 | PASS | ux 스크립트: 시안 A·B 추가 → 위로 → 끌어서 맨 앞 → 이름 '시안 B2' → 삭제, 첫 페이지가 바뀌어도 보드 소속 유지; .out/ux/p4-06-pages.png | S |
 | 7 | A 캔버스 | 시작 화면(launch.view: 캔버스 / 한 보드 전체 화면) | 캔버스 또는 한 보드를 꽉 채워 연다 | 보드 옵션 '시작 화면으로 열기' → board.json launch {view:focused,file}. 다시 열면 그 보드 전체 화면 보기로 시작. 전체 화면 보기(F)는 ←/→로 이웃 보드, Esc로 닫기 | PASS | ux 스크립트: 체크 후 새로 고침 → .focus 표시; .out/ux/p1-07-focus.png·p1-08-launch.png — Esc 닫기·aria-modal | M |
 | 8 | A 캔버스 | 페이지형 보드(expand: fill) | 전체 화면에서 창을 채우고 페이지처럼 스크롤 | 보드 옵션 '페이지형' → expand:"fill". 전체 화면 보기에서 창 크기로 채우고 스크롤 | PASS | ux 스크립트: .focus-fill 1600×952(창 크기); .out/ux/p1-08-expand-fill.png | M |
 | 9 | A 캔버스 | 보드 옵션 radius·frameless·is_interactive | 모서리·틀 없음·인터랙티브 보드만 파란 표시와 Play | 보드 옵션 모서리(radius)·틀 없이(frameless)·눌러 보는 보드(is_interactive). Play 버튼은 is_interactive 보드에만, 이름표에 초록 점 | PASS | ux 스크립트: 저장 값 radius 24·frameless·is_interactive, Play 0→1, 다른 보드 Play 0; .out/ux/p1-09-*.png | S |
-| 10 | A 캔버스 | 레이아웃 가이드(columns·rows·grid, gutter·margin·align·count·color·hidden) | 보드마다 최대 6개, 캔버스에만 보임 | 없음 | MISSING | 코드 | L |
+| 10 | A 캔버스 | 레이아웃 가이드(columns·rows·grid, gutter·margin·align·count·color·hidden) | 보드마다 최대 6개, 캔버스에만 보임 | 보드 옵션 아래 '레이아웃 가이드': 열·행(개수·간격·여백·정렬 늘이기/시작/가운데/끝·칸 크기)·격자(칸), 색, 숨기기, 삭제, 보드마다 6개. board.json guides에 저장, 캔버스에서만 보이고 HTML은 그대로. ⌃G로 모두 숨기기 | PASS | ux 스크립트: 열 4개 → .lg-track 4, 6개에서 추가 단추 꺼짐, ⌃G로 숨김; .out/ux/p4-10-guides.png | L |
 | 11 | A 캔버스 | 성능(98장 이상, 화면 밖 지연 렌더링) | 미리보기를 보여 주며 부드럽게 | 98장 로드 2.7초. 화면 밖이거나 25% 미만이면 iframe을 그리지 않음(맞춤 상태 0개, 한 보드 확대 5개). 축소 상태는 빈 틀이고 미리보기 썸네일이 없음 | PARTIAL | `A11.load_ms`=2668, `A11.iframes_at_fit`=0, `A11.iframes_when_focused`=5 | M |
-| 12 | B 메모 | 큰 제목(title1) 72px 굵게, maxW·maxH 넘으면 줄어듦 | 자동 축소 | 72px 700과 maxW는 됨. maxH와 자동 축소 없음 | PARTIAL | `B12.title_font`="72px 700" | S |
-| 13 | B 메모 | 포스트잇 너비·넘치면 스크롤·색 8가지 | 됨 | 너비 w만. 넘치면 늘어나고 색은 노랑 하나 | PARTIAL | 코드: `.note-sticky` 고정 색 | S |
-| 14 | B 메모 | 메모 옵션 size·bold·italic·page | 됨 | page만(현재 페이지로 생성). size·bold·italic 없음 | PARTIAL | 코드: `addNote` | S |
-| 15 | B 도형 | rect·oval·pen·line·arrow·image | 그려서 추가, 이미지 붙여넣기·업로드 | 없음 | MISSING | 코드 | L |
-| 16 | B 메모 | 이동·크기·삭제, 최대 200개 | 됨 | 이동·삭제(× 또는 Delete)·글 편집은 됨. 메모 id 겹침 고침(시간+무작위, 겹치면 다시). 크기 조절·개수 제한 없음 | PARTIAL | B16.delete_selected_note=true · 코드: addNote id | S |
+| 12 | B 메모 | 큰 제목(title1) 72px 굵게, maxW·maxH 넘으면 줄어듦 | 자동 축소 | 제목 72px 굵게(크기 바꿀 수 있음), 최대 너비·높이를 넘으면 글자를 줄임(최소 12px), 손잡이로 최대 너비 | PASS | ux 스크립트: 320×120에 긴 제목 → 34px; 제목이 world 폭 0 때문에 한 글자씩 꺾이던 문제도 고침(width:max-content); .out/ux/p4-12-title-shrink.png | S |
+| 13 | B 메모 | 포스트잇 너비·넘치면 스크롤·색 8가지 | 됨 | 포스트잇 색 8가지(노랑·주황·분홍·보라·파랑·초록·회색·흰색), 너비·높이(손잡이·숫자), 높이를 넘는 글은 스크롤 | PASS | ux 스크립트: 분홍·h 160 저장, 손잡이로 500×200; .out/ux/p4-13-sticky.png | S |
+| 14 | B 메모 | 메모 옵션 size·bold·italic·page | 됨 | 메모 옵션: 글자 크기·굵게·기울임·색·페이지(현재 페이지에 생성) | PASS | ux 스크립트: {size:28,bold:true,italic:true,color:pink} | S |
+| 15 | B 도형 | rect·oval·pen·line·arrow·image | 그려서 추가, 이미지 붙여넣기·업로드 | 도구 막대 사각형(R)·타원(O)·선(L)·화살표(A)·펜(P)으로 그리기(Shift 정사각·정원, 그냥 누르면 기본 크기), 이미지는 자산에서 고르거나 캔버스에 붙여넣기(자산으로 올라감). 선택·옮기기·크기·선 색·채우기·굵기·맨 앞/뒤·삭제(실행 취소). board.json shapes(id마다 한 줄) | PASS | ux 스크립트: rect 180×120·oval·line·arrow·pen(13점)·image(../assets/basket.jpg), 색 #C94F0C, 옮김 (50,20), 삭제→⌘Z; .out/ux/p4-15-shapes.png | L |
+| 16 | B 메모 | 이동·크기·삭제, 최대 200개 | 됨 | 메모 옮기기(끌기·화살표)·크기(손잡이)·삭제(× · Delete · 우클릭, 실행 취소)·글 편집, 200개 제한(앱·서버·MCP) | PASS | ux 스크립트: 손잡이 크기 500×200; 코드: MAX_NOTES·/api/notes 400 | S |
 | 17 | C 편집 | hover·클릭·Shift·Esc·보드 전체 선택 | 됨 | hover 외곽선, 클릭, Shift 다중, Esc 상위 됨. 보드 전체 선택 없음 | PARTIAL | `C17.hover_box`=1, `selected_path`=0/1/1/5, `shift_multi`=2, `esc_parent`=0/1/1 · `C17-select.png` | S |
 | 18 | C 편집 | 그 자리에서 글자 고치기(여러 줄) | 됨 | 글자 하나만 있는 요소는 됨(원본 그 글자만 바뀜). Shift+Enter 줄바꿈은 textContent로 저장돼 사라짐. 자식이 있으면 거부 | PARTIAL | `C18.settext_diff`(1줄) · 코드: `onTextEdit`의 `textContent` | M |
 | 19 | C 편집 | 요소 끌어 옮기기·크기·정렬 | 캔버스에서 바로 | 편집 중 고른 요소에 손잡이: 위쪽 손잡이로 끌면 놓을 자리 선(가리킨 요소 앞·뒤, 상자를 가리키면 그 안 위치, Alt면 가리킨 상자 안)→ move. 절대 위치 요소는 left/top. 오른쪽·아래·모서리 손잡이로 너비·높이(px). 속성 패널 정렬 6개(부모 배치에 맞춰 align-self/margin auto) | PASS | ux 스크립트: flex 행 안 순서 바꾸기 → 원본 반영·새 경로 선택·⌘Z 복원, 크기 → style="width:412px;height:69px", 가로 가운데 → align-self:center; .out/ux/p3-19-*.png — 손잡이 hit 영역 24×20·10px, accent 표시선 | L |
@@ -84,8 +84,8 @@
 | 43 | G 협업 | 댓글 고정·목록·답글·해결·작성자 | 됨 | 요소·보드 고정 핀, 목록, 해결·다시 열기, 작성자. 답글 없음. 축소 상태 보드는 핀이 오른쪽 위에 쌓임 | PARTIAL | M4 댓글 API 시험 · 코드: `renderOverlay` | S |
 | 44 | G 협업 | 버전 저장·분기 | 기본 기록 없음, Claude에게 저장 요청 | git 커밋·브랜치로 대체 | N/A | 공식 도움말: 버전 기록 아직 없음 | – |
 | 45 | G 협업 | 공유·권한·실시간 공동 편집 | 보기·댓글·편집 권한 공유 | git push·PR로 공유하고 각자 로컬에서 실행 | N/A | – | – |
-| 46 | H 단축키 | ⌘Z ⌘⇧Z Delete ⌘D 화살표 ⌘A ⌘G 스페이스 ⌘0 ⌘1 ⌘C ⌘V | 됨 | ⌘Z ⌘⇧Z(⌘Y) Delete ⌘D(보드·요소) ⌘C·⌘V(편집 중 요소) 화살표(Shift 10) ⌘A ⌘0 ⌘1 ⌘± ⇧1 ⇧2 ⌘K ⌘J ⌘\\ F2 F E M V H B T N Esc 스페이스. ⌘G F6 없음 | PARTIAL | App.tsx 단축키 표; 메뉴·툴팁에 표시 | M |
-| 47 | H 사용성 | 다크 모드·창 크기·휠 조작감 | 됨 | 토큰을 :root에 두고 prefers-color-scheme 다크·data-theme 둘 다 정의. 직접 바꾸는 단추는 P4 | PARTIAL | .out/ux/p1-dark.png | S |
+| 46 | H 단축키 | ⌘Z ⌘⇧Z Delete ⌘D 화살표 ⌘A ⌘G 스페이스 ⌘0 ⌘1 ⌘C ⌘V | 됨 | ⌘Z ⌘⇧Z(⌘Y) Delete ⌘D(보드·요소) 화살표(Shift 10·Option 100, 편집 중엔 형제 선택·Option+↑↓ 순서) ⌘A ⌘G(편집 중 flex로 감싸기) ⌃G(가이드) 스페이스 ⌘0 ⌘1 ⌘± ⌘C ⌘V F6(영역 포커스) ⌘\\(양쪽 패널) ⌘K ⌘J F2 F E M V H B T N R O L A P Esc. 메뉴·툴팁에 표시 | PASS | ux 스크립트: ⌘\\ 패널 숨김, F6 toolbar→left, ↑ 형제 선택, Option+↓ 순서 바꿈, ⌘G 형제 둘 감싸기(shift.mjs) | M |
+| 47 | H 사용성 | 다크 모드·창 크기·휠 조작감 | 됨 | 도구 막대 화면 모드 단추: 시스템→밝게→어둡게(data-theme, 기억). 토큰 색은 다크에서도 4.5:1, 창 크기 줄면 패널 겹침 | PASS | ux 스크립트: light→dark→system; .out/ux/p4-47-dark.png | S |
 | 48 | I 렌더링 | 98장 픽셀 동일성 | – | 98장 모두 1% 미만(최대 s-03-unfollowed 0.127%, 평균 0.059%) | PASS | `pixel/pixel.json` | – |
 | 49 | J 추가 | 캔버스 안 채팅 패널(claude -p·codex exec, 스트리밍, 취소, 에이전트 선택) | 채팅이 기본 | 오른쪽 'AI'(⌘J) 탭: Claude Code·Codex 고르기(설치 확인), 선택 요소·고른 보드·보이는 보드 칩(눌러서 빼기), Enter 보내기(한글 조합 중 무시), 글 조각 스트리밍·도구 줄·비용, 취소(Esc·단추, 프로세스 묶음 종료), 이어서 대화(--resume / exec resume), 새 대화 | PASS | e2e `chat.e2e.mjs`(가짜 에이전트: 스트리밍·원본 반영·맥락·취소); 실제: Claude Code 48s·Codex 38s로 scr-02 title만 바뀜; 단위 `chat.test.mjs`; .out/ux/p2-49-*.png | L |
 | 50 | J 추가 | 댓글을 AI에게 보내 그 위치만 고치기 | 인라인 댓글로 부분 수정 | 댓글 'AI에게 보내기' → 채팅에 댓글 칩. 맥락에 파일·경로·글과 '이 위치만 고치고 resolve_comment' 지시 | PASS | ux 스크립트: 프롬프트에 '댓글(c…) screens/scr-02.html 경로 0: "제목을 더 크게"' | M |

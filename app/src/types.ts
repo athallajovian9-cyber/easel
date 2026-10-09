@@ -21,7 +21,7 @@ export type BoardItem = {
 
 export type Launch = { view: "canvas" | "focused"; file?: string; page?: string };
 
-export type Tool = "select" | "hand" | "board" | "title" | "sticky";
+export type Tool = "select" | "hand" | "board" | "title" | "sticky" | "rect" | "oval" | "line" | "arrow" | "pen";
 
 export type Note = {
   kind: "title" | "sticky";
@@ -29,8 +29,50 @@ export type Note = {
   y: number;
   text: string;
   w?: number;
+  /** 포스트잇 높이(넘치면 스크롤) */
+  h?: number;
   maxW?: number;
+  /** 제목: 넘으면 글자를 줄인다 */
+  maxH?: number;
   page?: string;
+  /** 포스트잇 색 이름(STICKY_COLORS) */
+  color?: string;
+  /** 글자 크기 px */
+  size?: number;
+  bold?: boolean;
+  italic?: boolean;
+};
+
+export type ShapeKind = "rect" | "oval" | "line" | "arrow" | "pen" | "image";
+export type Shape = {
+  kind: ShapeKind;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** line·arrow·pen: 상자 왼쪽 위 기준 점들 */
+  points?: [number, number][];
+  stroke?: string;
+  fill?: string;
+  strokeWidth?: number;
+  /** 쌓는 순서(클수록 위) */
+  z?: number;
+  /** image: ../assets/이름 */
+  src?: string;
+  page?: string;
+};
+
+/** 레이아웃 가이드(보드마다 최대 6개, 캔버스에서만 보임) */
+export type LayoutGuide = {
+  type: "columns" | "rows" | "grid";
+  count: number;
+  gutter: number;
+  margin: number;
+  align: "stretch" | "start" | "center" | "end";
+  /** stretch가 아닐 때 칸 크기, grid는 칸 크기 */
+  size: number;
+  color: string;
+  hidden?: boolean;
 };
 
 export type Page = { id: string; name: string };
@@ -42,6 +84,8 @@ export type Board = {
   boards: Record<string, BoardItem>;
   order: string[];
   notes: Record<string, Note>;
+  shapes?: Record<string, Shape>;
+  guides?: Record<string, LayoutGuide[]>;
   launch?: Launch;
 };
 
