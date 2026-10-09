@@ -17,8 +17,8 @@
 
 | 판정 | 개수 |
 | --- | --- |
-| PASS | 10 |
-| PARTIAL | 30 |
+| PASS | 11 |
+| PARTIAL | 29 |
 | MISSING | 31 |
 | N/A | 3 |
 | 합계 | 74 |
@@ -71,9 +71,9 @@
 | 30 | D 프로토 | 스크립트(상태·이벤트·조건·반복) | 됨 | iframe에서 그대로 실행 | PASS | `D30.script_runs`: 버튼 두 번 → "2" | S |
 | 31 | D 프로토 | 다른 보드 끼워 넣기, 원본 바뀌면 갱신 | dc-import가 따라 바뀜 | 흐름도처럼 iframe으로 끼운 보드는 원본이 바뀌어도 그대로(바뀐 파일의 보드만 다시 불러옴) | MISSING | `D31.embedded_refresh`: scr-15 수정 후 f-3 안 false | S |
 | 32 | D 프로토 | Tweaks(색·enum·boolean·숫자 조절) | 패널에서 조절 | 없음(PLAN 범위 밖). 대체 제안: `:root`의 CSS 변수와 `<meta name="tweak" …>` 선언을 읽어 속성 패널에 표시 | MISSING | PLAN 0장 범위 밖 | M |
-| 33 | E AI | AI가 새 HTML → 즉시 보드·자동 배치 | 됨 | 323ms 안에 보드가 생기고 board-size 메타 크기로 '새 화면' 줄에 배치. Codex 시험 통과. Claude Code는 CLI 로그인 만료로 미시험 | PARTIAL | `E33.new_file_board_ms`=323, `E33.autoplaced`, M7 Codex 기록 | S |
-| 34 | E AI | AI 수정 즉시 반영(스크롤·선택 유지) | 됨 | 484ms에 그 보드만 다시 불러옴. 같은 경로로 다시 선택. 스크롤 되돌림 코드는 있으나 시험 보드에 스크롤이 없어 확인 못 함. Claude Code 미시험 | PARTIAL | `E34.reflect_ms`=484 · 코드: `LiveFrame` | S |
-| 35 | E AI | 선택 인식 정보 | mode, page, pageName, visible·selectedArtboards, 요소 kind·label, dirty, edits | file, path, paths, tag, text, outerHTML(4KB), hash, styles만. 캔버스 상태(보이는 보드·페이지·모드)와 편집 횟수 없음 | PARTIAL | 코드: `PUT /api/selection` | M |
+| 33 | E AI | AI가 새 HTML → 즉시 보드·자동 배치 | 됨 | 323ms 안에 보드가 생기고 board-size 메타 크기로 '새 화면' 줄에 배치. Claude Code·Codex 둘 다 새 화면 생성 → 자동 배치 → `place_board` 제목 확인 | PASS | `E33.*`, Claude Code(.mcp.json, claude -p) 2026-10-09: zz-claude-test.html 생성·제목 'Claude 시험' 캔버스 표시, Codex(M7) 같은 결과 | S |
+| 34 | E AI | AI 수정 즉시 반영(스크롤·선택 유지) | 됨 | 484ms에 그 보드만 다시 불러오고 같은 경로로 다시 선택. Claude Code·Codex 모두 "선택한 것 고쳐" → 그 글자만 바뀌고 캔버스 반영. 스크롤 되돌림은 스크롤 있는 보드에서 아직 시험 못 함 | PARTIAL | `E34.reflect_ms`=484, Claude Code: scr-32 0/1/1/5 글자만 수정(diff 1줄)·캔버스 반영 true, Codex(M7) 같은 결과 | S |
+| 35 | E AI | 선택 인식 정보 | mode, page, pageName, visible·selectedArtboards, 요소 kind·label, dirty, edits | file, path, paths, tag, text, outerHTML(4KB), hash, styles만. 캔버스 상태(보이는 보드·페이지·모드)와 편집 횟수 없음 | PARTIAL | 코드: `PUT /api/selection` · Claude Code·Codex 모두 get_selection = scr-32.html 0/1/1/5 a "문의 보내기" | M |
 | 36 | E AI | 오류 난 보드 목록·"고쳐 달라" | erroredArtboards, firstError, Ask Claude to fix | 없음(iframe 오류를 모으지 않음) | MISSING | 코드 | M |
 | 37 | E AI | AI가 댓글 읽기·답하기·해결 | 됨 | list·add·resolve 됨. 답글(스레드) 없음 | PARTIAL | MCP 도구 목록 | S |
 | 38 | E AI | AI가 배치·제목·페이지·메모 변경 | 캔버스 파일 전체를 쓴다 | `place_board`(위치·제목·페이지)만. 메모·페이지 만들기 도구 없음 | PARTIAL | MCP 도구 목록 | S |

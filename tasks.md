@@ -17,7 +17,7 @@
 - [x] M5 원본 패치(setText·setStyle·setAttr)·속성 패널·실행 취소
 - [x] M6 레이어·move·wrap·duplicate·delete
 - [x] M7 README·AGENTS.md·.mcp.json·draft PR, Codex 시험(새 화면 자동 표시, get_selection·place_board·선택한 것 고치기)
-- [ ] M7 Claude Code 시험: CLI 로그인 만료로 못 함(`claude /login` 뒤 다시)
+- [x] M7 Claude Code 시험(.mcp.json): get_selection·선택한 것 고치기·새 화면 자동 배치·place_board 통과(10/09)
 
 ### 결정 사항
 - 10/09 최소 확대율 4%(PLAN 10%): 보드 98장 전체(높이 약 17,700)를 한 화면에 보이려고.
