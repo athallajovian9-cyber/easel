@@ -14,7 +14,7 @@ export type EditState = {
   error: string | null;
 };
 
-export function useEditMode(editFile: string | null, getFrame: (f: string) => HTMLIFrameElement | null, hooks?: { onTextEdit?: (el: HTMLElement, path: string) => void }) {
+export function useEditMode(editFile: string | null, getFrame: (f: string) => HTMLIFrameElement | null, hooks?: { onTextEdit?: (el: HTMLElement, path: string) => void; onContext?: (path: string, at: { clientX: number; clientY: number }) => void }) {
   const [state, setState] = useState<EditState>({ hover: null, paths: [], rects: [], selection: null, error: null });
   const pathsRef = useRef<string[]>([]);
   pathsRef.current = state.paths;
@@ -102,6 +102,17 @@ export function useEditMode(editFile: string | null, getFrame: (f: string) => HT
         const p = t ? pathOf(t) : null;
         if (t && p != null) hooksRef.current?.onTextEdit?.(t, p);
       };
+      // 우클릭: 그 요소를 선택하고 앱 메뉴를 연다. iframe 안 좌표를 화면 좌표로 바꾼다
+      const onCtx = (e: MouseEvent) => {
+        e.preventDefault();
+        const t = target(e);
+        const p = t ? pathOf(t) : null;
+        if (p == null) return;
+        if (!pathsRef.current.includes(p)) void select([p]);
+        const r = frame.getBoundingClientRect();
+        const s = r.width / (frame.offsetWidth || r.width);
+        hooksRef.current?.onContext?.(p, { clientX: r.left + e.clientX * s, clientY: r.top + e.clientY * s });
+      };
       const onKey = (e: KeyboardEvent) => {
         if ((e.target as HTMLElement)?.isContentEditable) return;
         if (e.key === "Escape") {
@@ -119,6 +130,7 @@ export function useEditMode(editFile: string | null, getFrame: (f: string) => HT
       doc.addEventListener("mouseleave", onLeave, true);
       doc.addEventListener("click", onClick, true);
       doc.addEventListener("dblclick", onDbl, true);
+      doc.addEventListener("contextmenu", onCtx, true);
       doc.addEventListener("keydown", onKey, true);
       win.addEventListener("scroll", onScroll, true);
       detach = () => {
@@ -126,6 +138,7 @@ export function useEditMode(editFile: string | null, getFrame: (f: string) => HT
         doc.removeEventListener("mouseleave", onLeave, true);
         doc.removeEventListener("click", onClick, true);
         doc.removeEventListener("dblclick", onDbl, true);
+        doc.removeEventListener("contextmenu", onCtx, true);
         doc.removeEventListener("keydown", onKey, true);
         win.removeEventListener("scroll", onScroll, true);
       };

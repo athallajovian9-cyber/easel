@@ -1,33 +1,46 @@
 // AI-generated with Claude Code, 2026-10-09, reviewed by Hyun Park
-// 무한 캔버스: 이동·확대, 보드(iframe)·이름표·크기 조절, 메모. PLAN.md 5장.
-import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as RPointerEvent, type ReactNode } from "react";
+// 무한 캔버스: 도구(선택·손·보드·제목·메모), 이동·확대, 다중 선택·함께 옮기기·스냅 안내선, 보드(iframe)·이름표·크기, 메모. PLAN.md 5장.
+import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as RMouseEvent, type PointerEvent as RPointerEvent, type ReactNode } from "react";
 
-import type { Board, BoardItem, Note, View } from "./types";
+import { Icon } from "./icons";
+import type { Board, BoardItem, Note, Tool, View } from "./types";
 
 // PLAN은 10%였지만 보드 98장 전체(높이 약 17,700)를 한 화면에 보이려고 4%까지 허용
 export const MIN_ZOOM = 0.04;
 export const MAX_ZOOM = 4;
 /** 이 확대율보다 작으면 iframe 대신 빈 틀(PLAN.md 9장) */
 export const IFRAME_MIN_ZOOM = 0.25;
+const SNAP_PX = 6;
+
+export type Rect = { x: number; y: number; w: number; h: number };
+export type ContextTarget = { type: "board"; file: string } | { type: "note"; id: string } | { type: "canvas"; x: number; y: number };
+type Guide = { axis: "x" | "y"; at: number; from: number; to: number };
+type Gesture = null | { kind: "pan"; sx: number; sy: number; vx: number; vy: number } | { kind: "marquee" | "draw"; sx: number; sy: number; additive: boolean; moved: boolean };
 
 type Props = {
   board: Board;
   files: string[];
   view: View;
   setView: (v: View | ((v: View) => View)) => void;
+  tool: Tool;
+  setTool: (t: Tool) => void;
   visibleBoards: string[];
   visibleNotes: string[];
-  selectedBoard: string | null;
+  selected: string[];
   selectedNote: string | null;
   editFile: string | null;
   reloadKeys: Record<string, number>;
-  onSelectBoard: (f: string | null) => void;
+  onSelect: (files: string[], mode: "replace" | "toggle" | "add") => void;
   onSelectNote: (id: string | null) => void;
-  onMoveBoard: (f: string, patch: Partial<BoardItem>, done: boolean) => void;
+  onMoveBoards: (patches: Record<string, Partial<BoardItem>>, done: boolean) => void;
   onMoveNote: (id: string, patch: Partial<Note>, done: boolean) => void;
   onDeleteNote: (id: string) => void;
   onPlay: (f: string) => void;
   onEdit: (f: string | null) => void;
+  onRename: (f: string) => void;
+  onCreateBoard: (r: Rect) => void;
+  onCreateNote: (kind: Note["kind"], at: { x: number; y: number }) => void;
+  onContext: (t: ContextTarget, e: { clientX: number; clientY: number }) => void;
   renderBoardOverlay?: (f: string) => ReactNode;
   iframeRef?: (f: string, el: HTMLIFrameElement | null) => void;
   onSize?: (s: { w: number; h: number }) => void;
@@ -37,7 +50,10 @@ export function Canvas(p: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 1200, h: 800 });
   const [space, setSpace] = useState(false);
-  const panRef = useRef<{ sx: number; sy: number; vx: number; vy: number } | null>(null);
+  const [guides, setGuides] = useState<Guide[]>([]);
+  const [draft, setDraft] = useState<Rect | null>(null); // 보드 그리기·선택 영역
+  const draftRef = useRef<Rect | null>(null);
+  const gesture = useRef<Gesture>(null);
 
   useLayoutEffect(() => {
     const el = rootRef.current!;
@@ -50,7 +66,7 @@ export function Canvas(p: Props) {
     return () => ro.disconnect();
   }, []);
 
-  // 휠: ⌘/Ctrl이면 커서 기준 확대, 아니면 이동(트랙패드)
+  // 휠: ⌘/Ctrl(트랙패드 핀치 포함)이면 커서 기준 확대, 아니면 이동
   useEffect(() => {
     const el = rootRef.current!;
     const onWheel = (e: WheelEvent) => {
@@ -73,10 +89,10 @@ export function Canvas(p: Props) {
     return () => el.removeEventListener("wheel", onWheel);
   }, [p.setView]);
 
-  // 스페이스를 누르고 있으면 어디서든 끌어서 이동
+  // 스페이스를 누르고 있으면 손 도구
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      if (e.code === "Space" && !isTyping(e)) {
+      if (e.code === "Space" && !isTyping(e) && !e.repeat) {
         e.preventDefault();
         setSpace(true);
       }
@@ -90,62 +106,162 @@ export function Canvas(p: Props) {
     };
   }, []);
 
-  const startPan = (e: RPointerEvent) => {
-    panRef.current = { sx: e.clientX, sy: e.clientY, vx: p.view.x, vy: p.view.y };
-    (e.target as Element).setPointerCapture(e.pointerId);
+  const { view } = p;
+  const toWorld = (cx: number, cy: number) => {
+    const r = rootRef.current!.getBoundingClientRect();
+    return { x: (cx - r.left - view.x) / view.zoom, y: (cy - r.top - view.y) / view.zoom };
   };
-  const movePan = (e: RPointerEvent) => {
-    const s = panRef.current;
-    if (!s) return;
-    p.setView((v) => ({ ...v, x: s.vx + e.clientX - s.sx, y: s.vy + e.clientY - s.sy }));
+  const setDraftBoth = (r: Rect | null) => {
+    draftRef.current = r;
+    setDraft(r);
   };
-  const endPan = () => (panRef.current = null);
 
-  const onBgDown = (e: RPointerEvent) => {
-    if (e.button === 1 || e.button === 0) {
-      if (e.target === e.currentTarget || e.button === 1) {
-        if (e.button === 0) {
-          p.onSelectBoard(null);
-          p.onSelectNote(null);
-        }
-        startPan(e);
+  const panning = space || p.tool === "hand";
+  const onBgDown = (e: RPointerEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget && e.button !== 1) return;
+    (e.currentTarget as Element).setPointerCapture(e.pointerId);
+    if (e.button === 1 || panning) {
+      gesture.current = { kind: "pan", sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y };
+      return;
+    }
+    if (e.button !== 0) return;
+    const w = toWorld(e.clientX, e.clientY);
+    if (p.tool === "title" || p.tool === "sticky") {
+      p.onCreateNote(p.tool, { x: Math.round(w.x), y: Math.round(w.y) });
+      p.setTool("select");
+      return;
+    }
+    gesture.current = { kind: p.tool === "board" ? "draw" : "marquee", sx: w.x, sy: w.y, additive: e.shiftKey, moved: false };
+  };
+  const onBgMove = (e: RPointerEvent<HTMLDivElement>) => {
+    const g = gesture.current;
+    if (!g) return;
+    if (g.kind === "pan") {
+      p.setView((v) => ({ ...v, x: g.vx + e.clientX - g.sx, y: g.vy + e.clientY - g.sy }));
+      return;
+    }
+    const w = toWorld(e.clientX, e.clientY);
+    const r = { x: Math.min(g.sx, w.x), y: Math.min(g.sy, w.y), w: Math.abs(w.x - g.sx), h: Math.abs(w.y - g.sy) };
+    if ((r.w + r.h) * view.zoom > 4) g.moved = true;
+    if (g.moved) setDraftBoth(r);
+  };
+  const onBgUp = (e: RPointerEvent<HTMLDivElement>) => {
+    const g = gesture.current;
+    gesture.current = null;
+    if (!g || g.kind === "pan") return;
+    const r = draftRef.current;
+    setDraftBoth(null);
+    if (g.kind === "draw") {
+      const w = toWorld(e.clientX, e.clientY);
+      // 끌지 않고 누르기만 하면 390×844 기본 크기
+      p.onCreateBoard(g.moved && r && r.w > 20 && r.h > 20 ? roundRect(r) : { x: Math.round(w.x), y: Math.round(w.y), w: 390, h: 844 });
+      p.setTool("select");
+      return;
+    }
+    if (!g.moved || !r) {
+      if (!g.additive) {
+        p.onSelect([], "replace");
+        p.onSelectNote(null);
+      }
+      return;
+    }
+    const hit = p.visibleBoards.filter((f) => intersects(p.board.boards[f], r));
+    p.onSelect(hit, g.additive ? "add" : "replace");
+  };
+
+  /* ---------- 선택한 보드 함께 옮기기 + 스냅 ---------- */
+  const groupDrag = useRef<null | { sx: number; sy: number; origins: Record<string, { x: number; y: number }>; moved: boolean }>(null);
+  const startGroupDrag = (e: RPointerEvent, file: string) => {
+    const sel = p.selected.includes(file) ? p.selected : [file];
+    const origins: Record<string, { x: number; y: number }> = {};
+    for (const f of sel) origins[f] = { x: p.board.boards[f].x, y: p.board.boards[f].y };
+    groupDrag.current = { sx: e.clientX, sy: e.clientY, origins, moved: false };
+    (e.currentTarget as Element).setPointerCapture(e.pointerId);
+  };
+  const moveGroupDrag = (e: RPointerEvent, done = false) => {
+    const g = groupDrag.current;
+    if (!g) return;
+    let dx = (e.clientX - g.sx) / view.zoom;
+    let dy = (e.clientY - g.sy) / view.zoom;
+    if (!g.moved && Math.abs(dx) + Math.abs(dy) < 3 / view.zoom) return;
+    g.moved = true;
+    const files = Object.keys(g.origins);
+    // 스냅: 움직이는 묶음의 왼·가운데·오른쪽(위·가운데·아래)을 다른 보드의 같은 선에 맞춘다(Alt를 누르면 끔)
+    const moving = files.map((f) => ({ ...p.board.boards[f], x: g.origins[f].x + dx, y: g.origins[f].y + dy }));
+    const box = bounds(moving);
+    const others = p.visibleBoards.filter((f) => !files.includes(f)).map((f) => p.board.boards[f]);
+    const th = SNAP_PX / view.zoom;
+    const gs: Guide[] = [];
+    if (!e.altKey) {
+      const sx = snap1([box.x, box.x + box.w / 2, box.x + box.w], others.flatMap((o) => [o.x, o.x + o.w / 2, o.x + o.w]), th);
+      const sy = snap1([box.y, box.y + box.h / 2, box.y + box.h], others.flatMap((o) => [o.y, o.y + o.h / 2, o.y + o.h]), th);
+      if (sx) {
+        dx += sx.d;
+        const near = others.filter((o) => [o.x, o.x + o.w / 2, o.x + o.w].some((v) => Math.abs(v - sx.at) < 0.5));
+        gs.push({ axis: "x", at: sx.at, from: Math.min(box.y + (sy?.d ?? 0), ...near.map((o) => o.y)), to: Math.max(box.y + box.h + (sy?.d ?? 0), ...near.map((o) => o.y + o.h)) });
+      }
+      if (sy) {
+        dy += sy.d;
+        const near = others.filter((o) => [o.y, o.y + o.h / 2, o.y + o.h].some((v) => Math.abs(v - sy.at) < 0.5));
+        gs.push({ axis: "y", at: sy.at, from: Math.min(box.x + (sx?.d ?? 0), ...near.map((o) => o.x)), to: Math.max(box.x + box.w + (sx?.d ?? 0), ...near.map((o) => o.x + o.w)) });
       }
     }
+    setGuides(done ? [] : gs);
+    const patches: Record<string, Partial<BoardItem>> = {};
+    for (const f of files) patches[f] = { x: Math.round(g.origins[f].x + dx), y: Math.round(g.origins[f].y + dy) };
+    p.onMoveBoards(patches, done);
+  };
+  const endGroupDrag = (e: RPointerEvent) => {
+    const g = groupDrag.current;
+    if (g?.moved) moveGroupDrag(e, true);
+    groupDrag.current = null;
+    setGuides([]);
   };
 
-  const { view } = p;
   const vw = size.w / view.zoom;
   const vh = size.h / view.zoom;
   const vx = -view.x / view.zoom;
   const vy = -view.y / view.zoom;
-  const inView = (b: { x: number; y: number; w: number; h: number }) =>
-    b.x + b.w > vx - 200 && b.x < vx + vw + 200 && b.y + b.h > vy - 200 && b.y < vy + vh + 200;
+  const inView = (b: Rect) => b.x + b.w > vx - 200 && b.x < vx + vw + 200 && b.y + b.h > vy - 200 && b.y < vy + vh + 200;
+  const startPanCapture = (e: RPointerEvent) => {
+    (e.currentTarget as Element).setPointerCapture(e.pointerId);
+    gesture.current = { kind: "pan", sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y };
+  };
 
   return (
     <div
       ref={rootRef}
-      className={`canvas ${space ? "panning" : ""}`}
+      className={`canvas tool-${panning ? "hand" : p.tool}`}
       onPointerDown={onBgDown}
-      onPointerMove={movePan}
-      onPointerUp={endPan}
+      onPointerMove={onBgMove}
+      onPointerUp={onBgUp}
       onAuxClick={(e) => e.preventDefault()}
+      onContextMenu={(e) => {
+        if (e.target !== e.currentTarget) return;
+        e.preventDefault();
+        const w = toWorld(e.clientX, e.clientY);
+        p.onContext({ type: "canvas", x: Math.round(w.x), y: Math.round(w.y) }, e);
+      }}
+      role="application"
+      aria-label="디자인 캔버스"
     >
       <div className="world" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.zoom})` }}>
         {p.visibleNotes.map((id) => (
           <NoteView
             key={id}
-            id={id}
             note={p.board.notes[id]}
             zoom={view.zoom}
             selected={p.selectedNote === id}
             onSelect={() => p.onSelectNote(id)}
             onMove={(patch, done) => p.onMoveNote(id, patch, done)}
             onDelete={() => p.onDeleteNote(id)}
+            onContext={(e) => p.onContext({ type: "note", id }, e)}
           />
         ))}
         {p.visibleBoards.map((f) => {
           const b = p.board.boards[f];
           const live = inView(b) && (view.zoom >= IFRAME_MIN_ZOOM || p.editFile === f);
+          const selected = p.selected.includes(f);
           return (
             <BoardView
               key={f}
@@ -154,20 +270,47 @@ export function Canvas(p: Props) {
               exists={p.files.includes(f)}
               zoom={view.zoom}
               live={live}
-              selected={p.selectedBoard === f}
+              selected={selected}
+              single={selected && p.selected.length === 1}
               editing={p.editFile === f}
               reloadKey={p.reloadKeys[f] ?? 0}
-              onSelect={() => p.onSelectBoard(f)}
-              onMove={(patch, done) => p.onMoveBoard(f, patch, done)}
+              onPointerDownLabel={(e) => {
+                if (e.button !== 0) return;
+                e.stopPropagation();
+                if (e.shiftKey) {
+                  p.onSelect([f], "toggle");
+                  return;
+                }
+                if (!selected) p.onSelect([f], "replace");
+                startGroupDrag(e, f);
+              }}
+              onPointerMoveLabel={(e) => moveGroupDrag(e)}
+              onPointerUpLabel={endGroupDrag}
+              onSelect={(e) => p.onSelect([f], e.shiftKey ? "toggle" : "replace")}
+              onResize={(patch, done) => p.onMoveBoards({ [f]: patch }, done)}
               onPlay={() => p.onPlay(f)}
               onEdit={() => p.onEdit(p.editFile === f ? null : f)}
+              onRename={() => p.onRename(f)}
+              onContext={(e) => p.onContext({ type: "board", file: f }, e)}
               overlay={p.renderBoardOverlay?.(f)}
               iframeRef={(el) => p.iframeRef?.(f, el)}
             />
           );
         })}
+        {guides.map((g, i) =>
+          g.axis === "x" ? (
+            <div key={i} className="guide" style={{ left: g.at, top: g.from, width: 1 / view.zoom, height: g.to - g.from }} />
+          ) : (
+            <div key={i} className="guide" style={{ left: g.from, top: g.at, height: 1 / view.zoom, width: g.to - g.from }} />
+          ),
+        )}
+        {draft && (
+          <div className={p.tool === "board" ? "draft-board" : "marquee"} style={{ left: draft.x, top: draft.y, width: draft.w, height: draft.h, borderWidth: 1 / view.zoom }}>
+            {p.tool === "board" && <span style={{ transform: `scale(${1 / view.zoom})` }}>{Math.round(draft.w)} × {Math.round(draft.h)}</span>}
+          </div>
+        )}
       </div>
-      {space && <div className="pan-capture" onPointerDown={startPan} onPointerMove={movePan} onPointerUp={endPan} />}
+      {space && <div className="pan-capture" onPointerDown={startPanCapture} onPointerMove={onBgMove} onPointerUp={() => (gesture.current = null)} />}
     </div>
   );
 }
@@ -179,72 +322,72 @@ function BoardView(props: {
   zoom: number;
   live: boolean;
   selected: boolean;
+  single: boolean;
   editing: boolean;
   reloadKey: number;
-  onSelect: () => void;
-  onMove: (patch: Partial<BoardItem>, done: boolean) => void;
+  onPointerDownLabel: (e: RPointerEvent) => void;
+  onPointerMoveLabel: (e: RPointerEvent) => void;
+  onPointerUpLabel: (e: RPointerEvent) => void;
+  onSelect: (e: RPointerEvent) => void;
+  onResize: (patch: Partial<BoardItem>, done: boolean) => void;
   onPlay: () => void;
   onEdit: () => void;
+  onRename: () => void;
+  onContext: (e: RMouseEvent) => void;
   overlay?: ReactNode;
   iframeRef: (el: HTMLIFrameElement | null) => void;
 }) {
   const { item: b, zoom } = props;
-  const drag = useDrag(zoom);
-  // 이름표는 화면에서 같은 크기로 보이게 확대율의 역수로 키운다
-  const labelScale = 1 / zoom;
+  const resize = useDrag(zoom);
+  const title = b.title ?? props.file;
+  const ctx = (e: RMouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    props.onContext(e);
+  };
+  const stop = (e: RPointerEvent) => e.stopPropagation();
   return (
     <div
-      className={`board ${props.selected ? "selected" : ""} ${props.editing ? "editing" : ""}`}
+      className={`board ${props.selected ? "selected" : ""} ${props.editing ? "editing" : ""} ${b.frameless ? "frameless" : ""} ${b.is_interactive ? "interactive" : ""}`}
       style={{ left: b.x, top: b.y, width: b.w, height: b.h }}
       data-file={props.file}
     >
       <div
         className="board-label"
-        style={{ transform: `scale(${labelScale})`, width: b.w * zoom }}
-        onPointerDown={(e) => {
-          if (e.button !== 0) return;
-          e.stopPropagation();
-          props.onSelect();
-          drag.start(e, { x: b.x, y: b.y }, (d, done) => props.onMove({ x: Math.round(d.x), y: Math.round(d.y) }, done));
-        }}
-        onPointerMove={drag.move}
-        onPointerUp={drag.end}
-        onDoubleClick={(e) => {
-          e.stopPropagation();
-          props.onEdit();
-        }}
+        style={{ transform: `scale(${1 / zoom})`, width: b.w * zoom }}
+        onPointerDown={props.onPointerDownLabel}
+        onPointerMove={props.onPointerMoveLabel}
+        onPointerUp={props.onPointerUpLabel}
+        onContextMenu={ctx}
+        title={`${title} · ${props.file}`}
       >
-        <span className="board-title">{b.title ?? props.file}</span>
-        {b.w * zoom >= 160 && <span className="board-file">{props.file}</span>}
-        {b.w * zoom >= 90 && (
-          <>
-        <button
-          className="board-btn"
-          title="Play"
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
+        {b.is_interactive && <span className="dot" aria-label="눌러 보는 보드" />}
+        <span
+          className="board-title"
+          onDoubleClick={(e) => {
             e.stopPropagation();
-            props.onPlay();
+            props.onRename();
           }}
         >
-          ▶
-        </button>
-        <button
-          className={`board-btn ${props.editing ? "on" : ""}`}
-          title="편집 모드(보드 더블클릭)"
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation();
-            props.onEdit();
-          }}
-        >
-          ✎
-        </button>
-          </>
+          {title}
+        </span>
+        {b.w * zoom >= 160 && title !== props.file && <span className="board-file">{props.file}</span>}
+        {b.w * zoom >= 110 && (
+          <span className="board-btns">
+            {b.is_interactive && (
+              <button className="icon-btn sm" aria-label="Play" title="Play" onPointerDown={stop} onClick={(e) => { e.stopPropagation(); props.onPlay(); }}>
+                <Icon name="play" size={14} />
+              </button>
+            )}
+            <button className={`icon-btn sm ${props.editing ? "on" : ""}`} aria-label="편집 모드" title="편집 (E · 더블클릭)" onPointerDown={stop} onClick={(e) => { e.stopPropagation(); props.onEdit(); }}>
+              <Icon name="edit" size={14} />
+            </button>
+          </span>
         )}
       </div>
       <div
         className="board-frame"
+        style={{ borderRadius: b.radius ?? 0 }}
         onDoubleClick={(e) => {
           if (!props.editing) {
             e.stopPropagation();
@@ -254,40 +397,38 @@ function BoardView(props: {
         onPointerDown={(e) => {
           if (e.button === 0 && !props.editing) {
             e.stopPropagation();
-            props.onSelect();
+            props.onSelect(e);
           }
         }}
+        onContextMenu={(e) => !props.editing && ctx(e)}
       >
         {!props.exists ? (
-          <div className="board-missing">파일 없음</div>
+          <div className="board-missing">파일 없음 · {props.file}</div>
         ) : props.live ? (
-          <LiveFrame
-            reloadKey={props.reloadKey}
-            iframeRef={props.iframeRef}
-            src={`/screens/${props.file}`}
-            title={b.title ?? props.file}
-            editing={props.editing}
-          />
+          <LiveFrame reloadKey={props.reloadKey} iframeRef={props.iframeRef} src={`/screens/${props.file}`} title={title} editing={props.editing} />
         ) : (
-          <div className="board-placeholder" style={{ fontSize: Math.min(64, 18 / zoom) }}>
-            {b.title ?? props.file}
+          <div className="board-placeholder" style={{ fontSize: Math.min(64, 14 / zoom) }}>
+            {title}
           </div>
         )}
         {props.overlay}
       </div>
-      <div
-        className="board-resize"
-        style={{ width: 16 / zoom, height: 16 / zoom }}
-        onPointerDown={(e) => {
-          if (e.button !== 0) return;
-          e.stopPropagation();
-          drag.start(e, { x: b.w, y: b.h }, (d, done) =>
-            props.onMove({ w: Math.max(40, Math.round(d.x)), h: Math.max(40, Math.round(d.y)) }, done),
-          );
-        }}
-        onPointerMove={drag.move}
-        onPointerUp={drag.end}
-      />
+      {props.single && (
+        <div
+          className="board-resize"
+          role="slider"
+          aria-label="보드 크기"
+          aria-valuetext={`${b.w} × ${b.h}`}
+          style={{ width: 12 / zoom, height: 12 / zoom, right: -6 / zoom, bottom: -6 / zoom, borderWidth: 1.5 / zoom }}
+          onPointerDown={(e) => {
+            if (e.button !== 0) return;
+            e.stopPropagation();
+            resize.start(e, { x: b.w, y: b.h }, (d, done) => props.onResize({ w: clamp(Math.round(d.x), 40, 8000), h: clamp(Math.round(d.y), 40, 8000) }, done));
+          }}
+          onPointerMove={resize.move}
+          onPointerUp={resize.end}
+        />
+      )}
     </div>
   );
 }
@@ -305,10 +446,9 @@ function LiveFrame(props: { src: string; title: string; reloadKey: number; editi
     const win = el?.contentWindow;
     if (!el || !win) return;
     const doc = win.document;
-    // 문서 스크롤과 안쪽 스크롤 영역 위치를 기억
-    const scrolls: [string, number, number][] = [];
+    const scrolls: [number, number, number][] = [];
     doc.querySelectorAll<HTMLElement>("*").forEach((n, i) => {
-      if (n.scrollTop || n.scrollLeft) scrolls.push([String(i), n.scrollTop, n.scrollLeft]);
+      if (n.scrollTop || n.scrollLeft) scrolls.push([i, n.scrollTop, n.scrollLeft]);
     });
     const sx = win.scrollX;
     const sy = win.scrollY;
@@ -318,7 +458,7 @@ function LiveFrame(props: { src: string; title: string; reloadKey: number; editi
       w.scrollTo(sx, sy);
       const all = w.document.querySelectorAll<HTMLElement>("*");
       for (const [i, t, l] of scrolls) {
-        const n = all[Number(i)];
+        const n = all[i];
         if (n) {
           n.scrollTop = t;
           n.scrollLeft = l;
@@ -342,15 +482,7 @@ function LiveFrame(props: { src: string; title: string; reloadKey: number; editi
   );
 }
 
-function NoteView(props: {
-  id: string;
-  note: Note;
-  zoom: number;
-  selected: boolean;
-  onSelect: () => void;
-  onMove: (patch: Partial<Note>, done: boolean) => void;
-  onDelete: () => void;
-}) {
+function NoteView(props: { note: Note; zoom: number; selected: boolean; onSelect: () => void; onMove: (patch: Partial<Note>, done: boolean) => void; onDelete: () => void; onContext: (e: RMouseEvent) => void }) {
   const { note: n } = props;
   const drag = useDrag(props.zoom);
   const [editing, setEditing] = useState(false);
@@ -365,10 +497,7 @@ function NoteView(props: {
       s?.addRange(r);
     }
   }, [editing]);
-  const style =
-    n.kind === "title"
-      ? { left: n.x, top: n.y, maxWidth: n.maxW ?? 4000 }
-      : { left: n.x, top: n.y, width: n.w ?? 320 };
+  const style = n.kind === "title" ? { left: n.x, top: n.y, maxWidth: n.maxW ?? 4000 } : { left: n.x, top: n.y, width: n.w ?? 320 };
   return (
     <div
       className={`note note-${n.kind} ${props.selected ? "selected" : ""}`}
@@ -384,6 +513,12 @@ function NoteView(props: {
       onDoubleClick={(e) => {
         e.stopPropagation();
         setEditing(true);
+      }}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        props.onSelect();
+        props.onContext(e);
       }}
     >
       <div
@@ -403,16 +538,8 @@ function NoteView(props: {
         {n.text}
       </div>
       {props.selected && !editing && (
-        <button
-          className="note-del"
-          style={{ transform: `scale(${1 / props.zoom})` }}
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation();
-            props.onDelete();
-          }}
-        >
-          ×
+        <button className="note-del icon-btn" aria-label="메모 삭제" style={{ transform: `scale(${1 / props.zoom})` }} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); props.onDelete(); }}>
+          <Icon name="close" size={14} />
         </button>
       )}
     </div>
@@ -445,25 +572,40 @@ function useDrag(zoom: number) {
   };
 }
 
+function snap1(edges: number[], targets: number[], th: number) {
+  let best: { d: number; at: number } | null = null;
+  for (const e of edges)
+    for (const t of targets) {
+      const d = t - e;
+      if (Math.abs(d) <= th && (!best || Math.abs(d) < Math.abs(best.d))) best = { d, at: t };
+    }
+  return best;
+}
+const bounds = (rs: Rect[]) => {
+  const x = Math.min(...rs.map((r) => r.x));
+  const y = Math.min(...rs.map((r) => r.y));
+  return { x, y, w: Math.max(...rs.map((r) => r.x + r.w)) - x, h: Math.max(...rs.map((r) => r.y + r.h)) - y };
+};
+const intersects = (a: Rect, b: Rect) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+const roundRect = (r: Rect) => ({ x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h) });
+
 export function clamp(v: number, a: number, b: number) {
   return Math.min(b, Math.max(a, v));
 }
 
 export function isTyping(e: KeyboardEvent) {
   const t = e.target as HTMLElement | null;
-  return !!t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+  if (!t) return false;
+  if (t.tagName === "INPUT") return !/^(checkbox|radio|button|range|color)$/.test((t as HTMLInputElement).type);
+  return t.isContentEditable || /^(TEXTAREA|SELECT)$/.test(t.tagName);
 }
 
 /** 보드·메모 묶음이 화면에 꽉 차게 */
-export function fitView(rects: { x: number; y: number; w: number; h: number }[], size: { w: number; h: number }, pad = 60): View {
+export function fitView(rects: Rect[], size: { w: number; h: number }, pad = 60): View {
   if (!rects.length) return { x: 0, y: 0, zoom: 1 };
-  // 창이 가려져 캔버스 크기가 0으로 잡힌 경우 창 크기로 대신한다
   if (size.w < 100 || size.h < 100) size = { w: window.innerWidth, h: Math.max(200, window.innerHeight - 48) };
   pad = Math.min(pad, size.w * 0.08, size.h * 0.08);
-  const minX = Math.min(...rects.map((r) => r.x));
-  const minY = Math.min(...rects.map((r) => r.y));
-  const maxX = Math.max(...rects.map((r) => r.x + r.w));
-  const maxY = Math.max(...rects.map((r) => r.y + r.h));
-  const zoom = clamp(Math.min((size.w - pad * 2) / (maxX - minX), (size.h - pad * 2) / (maxY - minY)), MIN_ZOOM, MAX_ZOOM);
-  return { zoom, x: pad - minX * zoom + (size.w - pad * 2 - (maxX - minX) * zoom) / 2, y: pad - minY * zoom + (size.h - pad * 2 - (maxY - minY) * zoom) / 2 };
+  const b = bounds(rects);
+  const zoom = clamp(Math.min((size.w - pad * 2) / b.w, (size.h - pad * 2) / b.h), MIN_ZOOM, MAX_ZOOM);
+  return { zoom, x: pad - b.x * zoom + (size.w - pad * 2 - b.w * zoom) / 2, y: pad - b.y * zoom + (size.h - pad * 2 - b.h * zoom) / 2 };
 }

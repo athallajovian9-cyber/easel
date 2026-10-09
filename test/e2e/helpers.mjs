@@ -78,7 +78,7 @@ export async function openBoard(page, url, file, { edit = false } = {}) {
     document.querySelector(`.board[data-file="${f}"] .board-frame`).dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 1 }));
   }, file);
   await wait(100);
-  await page.getByRole("button", { name: "선택 보드로" }).click();
+  await page.keyboard.press("Shift+Digit2"); // 선택한 보드로 이동
   await page.waitForSelector(`.board[data-file="${file}"] iframe`);
   await wait(600);
   if (edit) {

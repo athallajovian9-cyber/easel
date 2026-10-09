@@ -12,11 +12,11 @@ async function json<T>(res: Response): Promise<T> {
 
 export const api = {
   board: () => fetch("/api/board").then((r) => json<BoardResponse>(r)),
-  saveBoard: (board: Board) =>
+  saveBoard: (board: Board, label?: string) =>
     fetch("/api/board", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...board, clientId }),
+      body: JSON.stringify({ ...board, clientId, ...(label ? { label } : {}) }),
     }).then((r) => json<{ ok: true }>(r)),
   post: <T>(path: string, body: unknown) =>
     fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then((r) => json<T>(r)),
@@ -29,7 +29,8 @@ export type ServerEvent =
   | { type: "file-changed"; file: string; kind: "change" | "add" | "unlink" }
   | { type: "board-changed"; source: string | null }
   | { type: "selection-changed" }
-  | { type: "comments-changed" };
+  | { type: "comments-changed" }
+  | { type: "history-changed" };
 
 /** 끊기면 1초 뒤 다시 붙는 WS */
 export function connectEvents(onEvent: (e: ServerEvent) => void) {

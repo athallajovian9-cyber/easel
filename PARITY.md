@@ -17,9 +17,9 @@
 
 | 판정 | 개수 |
 | --- | --- |
-| PASS | 15 |
-| PARTIAL | 27 |
-| MISSING | 29 |
+| PASS | 26 |
+| PARTIAL | 25 |
+| MISSING | 20 |
 | N/A | 3 |
 | 합계 | 74 |
 
@@ -40,14 +40,14 @@
 | # | 영역 | 기능 | Claude Design 동작 | 우리 동작 | 판정 | 근거 | 난이도 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | A 캔버스 | 무한 캔버스 이동·확대·맞춤 | 스페이스·트랙패드 이동, ⌘휠·핀치 확대, 전체 맞춤, 선택 보드로 | 모두 됨. 확대 4~400%. 핀치는 Chrome에서 ⌘휠과 같은 이벤트로 들어와 같이 동작 | PASS | `A1.*`: ⌘휠 5%→21%, 휠·스페이스 드래그로 변환 바뀜, 전체 보기 5%, 선택 보드로 62% · `A1-fit.png`, `A1-focused.png` | S |
-| 2 | A 캔버스 | 보드 만들기·삭제·복제·이름 바꾸기, 아트보드 도구 | 도구로 빈 보드를 그리고, 메뉴로 삭제·복제·이름 변경 | UI가 없다. 파일을 만들면 보드가 생기고, 제목은 MCP `place_board`로만 바꿈 | MISSING | 코드: `App.tsx`에 보드 생성·삭제·복제·제목 편집 없음 | M |
-| 3 | A 캔버스 | 보드 이동·크기(40~8000), 다중 선택·이동, 스냅·가이드선 | 모두 됨 | 이동·크기는 되고 board.json의 그 값만 바뀜(최소 40, 최대 제한 없음). 다중 선택·스냅 없음 | PARTIAL | `A3.move_diff`(x·y 2줄), `A3.resize_diff`(w·h 포함), `A3.multi_select_count`=1 | M |
-| 4 | A 캔버스 | 보드 순서(앞뒤 겹침) | 앞으로·뒤로 보내기 | `order` 순서로 그린다. 바꾸는 UI 없음 | PARTIAL | 코드: `visibleBoards = board.order…` | S |
+| 2 | A 캔버스 | 보드 만들기·삭제·복제·이름 바꾸기, 아트보드 도구 | 도구로 빈 보드를 그리고, 메뉴로 삭제·복제·이름 변경 | 보드 도구(B)로 그리거나 우클릭 '여기에 보드 만들기'로 새 HTML+자리 생성. 삭제는 확인 창→.trash 사본→토스트 '실행 취소'. 복제(⌘D)는 오른쪽에 -copy. 이름(F2·제목 더블클릭)·파일 이름은 앱 안 입력 창, 참조 파일 목록과 '참조 N곳도 바꾸기' 선택 | PASS | e2e `boards.e2e.mjs` 만들기→삭제→⌘Z 되살림→⌘Z 만들기 취소→⌘⇧Z; .out/ux/p1-02-*.png(토스트·확인·이름·참조 20곳) — 4단위 간격·토큰 색·확인+취소 충족 | M |
+| 3 | A 캔버스 | 보드 이동·크기(40~8000), 다중 선택·이동, 스냅·가이드선 | 모두 됨 | 이동·크기(40~8000), 빈 곳 끌어 영역 선택·Shift 추가, 함께 옮기기, 다른 보드의 왼·가운데·오른쪽(위·가운데·아래)에 6px 스냅+안내선(Alt로 끔), 화살표 1·Shift 10 이동 | PASS | ux 스크립트: 끄는 중 .guide 2개, .out/ux/p1-03-multi.png·p1-03-snap-guides.png — 선택·호버 상태 구분, 안내선 accent 1px | M |
+| 4 | A 캔버스 | 보드 순서(앞뒤 겹침) | 앞으로·뒤로 보내기 | 맨 앞(⌘])·맨 뒤(⌘[)로 order 바꿈, 우클릭·보드 옵션·여러 개 선택 패널에서도 | PASS | 우클릭 메뉴 단축키 표시 .out/ux/p1-65-menu-board.png, 기록 라벨 '맨 앞으로' | S |
 | 5 | A 캔버스 | title 없으면 파일명 | 파일명 표시 | `b.title ?? 파일` 표시. 새 파일은 파일 이름(확장자 뺌)이 제목으로 기록됨 | PASS | `A5.label_for_new_file`="zz-parity-new" | S |
-| 6 | A 캔버스 | 페이지 40개·추가·이름·삭제·순서·이동·launch.page | 모두 됨 | 추가·이름 변경(브라우저 prompt)·보드 옮기기 됨. 삭제·순서 변경·개수 제한·처음 열 페이지 없음 | PARTIAL | 코드: `addPage`, `renamePage`, `moveSelectedToPage`만 있음 | S |
-| 7 | A 캔버스 | 시작 화면(launch.view: 캔버스 / 한 보드 전체 화면) | 캔버스 또는 한 보드를 꽉 채워 연다 | 항상 캔버스 전체 보기로 시작. 한 보드 전체 화면 보기 없음(Play는 상호작용 오버레이) | MISSING | 코드: 첫 로드에 `fitView` 고정 | M |
-| 8 | A 캔버스 | 페이지형 보드(expand: fill) | 전체 화면에서 창을 채우고 페이지처럼 스크롤 | 없음. 모든 보드는 고정 w×h | MISSING | 코드: board.json에 expand 없음 | M |
-| 9 | A 캔버스 | 보드 옵션 radius·frameless·is_interactive | 모서리·틀 없음·인터랙티브 보드만 파란 표시와 Play | 옵션 없음. 모든 보드에 ▶ | MISSING | 코드: `BoardView`에 옵션 없음 | S |
+| 6 | A 캔버스 | 페이지 40개·추가·이름·삭제·순서·이동·launch.page | 모두 됨 | 추가·이름 변경은 앱 안 입력 창(prompt 없음), 페이지 우클릭으로 선택 보드 옮기기. 삭제·순서 변경·개수 제한은 P4 | PARTIAL | 코드: `addPage`, `renamePage`, `pageMenu` | S |
+| 7 | A 캔버스 | 시작 화면(launch.view: 캔버스 / 한 보드 전체 화면) | 캔버스 또는 한 보드를 꽉 채워 연다 | 보드 옵션 '시작 화면으로 열기' → board.json launch {view:focused,file}. 다시 열면 그 보드 전체 화면 보기로 시작. 전체 화면 보기(F)는 ←/→로 이웃 보드, Esc로 닫기 | PASS | ux 스크립트: 체크 후 새로 고침 → .focus 표시; .out/ux/p1-07-focus.png·p1-08-launch.png — Esc 닫기·aria-modal | M |
+| 8 | A 캔버스 | 페이지형 보드(expand: fill) | 전체 화면에서 창을 채우고 페이지처럼 스크롤 | 보드 옵션 '페이지형' → expand:"fill". 전체 화면 보기에서 창 크기로 채우고 스크롤 | PASS | ux 스크립트: .focus-fill 1600×952(창 크기); .out/ux/p1-08-expand-fill.png | M |
+| 9 | A 캔버스 | 보드 옵션 radius·frameless·is_interactive | 모서리·틀 없음·인터랙티브 보드만 파란 표시와 Play | 보드 옵션 모서리(radius)·틀 없이(frameless)·눌러 보는 보드(is_interactive). Play 버튼은 is_interactive 보드에만, 이름표에 초록 점 | PASS | ux 스크립트: 저장 값 radius 24·frameless·is_interactive, Play 0→1, 다른 보드 Play 0; .out/ux/p1-09-*.png | S |
 | 10 | A 캔버스 | 레이아웃 가이드(columns·rows·grid, gutter·margin·align·count·color·hidden) | 보드마다 최대 6개, 캔버스에만 보임 | 없음 | MISSING | 코드 | L |
 | 11 | A 캔버스 | 성능(98장 이상, 화면 밖 지연 렌더링) | 미리보기를 보여 주며 부드럽게 | 98장 로드 2.7초. 화면 밖이거나 25% 미만이면 iframe을 그리지 않음(맞춤 상태 0개, 한 보드 확대 5개). 축소 상태는 빈 틀이고 미리보기 썸네일이 없음 | PARTIAL | `A11.load_ms`=2668, `A11.iframes_at_fit`=0, `A11.iframes_when_focused`=5 | M |
 | 12 | B 메모 | 큰 제목(title1) 72px 굵게, maxW·maxH 넘으면 줄어듦 | 자동 축소 | 72px 700과 maxW는 됨. maxH와 자동 축소 없음 | PARTIAL | `B12.title_font`="72px 700" | S |
@@ -84,8 +84,8 @@
 | 43 | G 협업 | 댓글 고정·목록·답글·해결·작성자 | 됨 | 요소·보드 고정 핀, 목록, 해결·다시 열기, 작성자. 답글 없음. 축소 상태 보드는 핀이 오른쪽 위에 쌓임 | PARTIAL | M4 댓글 API 시험 · 코드: `renderOverlay` | S |
 | 44 | G 협업 | 버전 저장·분기 | 기본 기록 없음, Claude에게 저장 요청 | git 커밋·브랜치로 대체 | N/A | 공식 도움말: 버전 기록 아직 없음 | – |
 | 45 | G 협업 | 공유·권한·실시간 공동 편집 | 보기·댓글·편집 권한 공유 | git push·PR로 공유하고 각자 로컬에서 실행 | N/A | – | – |
-| 46 | H 단축키 | ⌘Z ⌘⇧Z Delete ⌘D 화살표 ⌘A ⌘G 스페이스 ⌘0 ⌘1 ⌘C ⌘V | 됨 | 편집 모드 ⌘Z/⌘⇧Z, 메모 Delete, 스페이스 이동만. ⌘0·⌘1·⌘A·⌘D·⌘G·화살표·⌘C·⌘V 없음 | PARTIAL | `H46.shortcuts_effect` 모두 false | M |
-| 47 | H 사용성 | 다크 모드·창 크기·휠 조작감 | 됨 | 창 크기 변경과 휠·트랙패드는 됨. 다크 모드 없음(밝은 화면 고정) | PARTIAL | `H47.dark_mode_media`=false | S |
+| 46 | H 단축키 | ⌘Z ⌘⇧Z Delete ⌘D 화살표 ⌘A ⌘G 스페이스 ⌘0 ⌘1 ⌘C ⌘V | 됨 | ⌘Z ⌘⇧Z(⌘Y) Delete ⌘D 화살표(Shift 10) ⌘A ⌘0 ⌘1 ⌘± ⇧1 ⇧2 ⌘K ⌘\\ F2 F E M V H B T N Esc 스페이스. ⌘G ⌘C ⌘V F6 없음 | PARTIAL | App.tsx 단축키 표; 메뉴·툴팁에 표시 | M |
+| 47 | H 사용성 | 다크 모드·창 크기·휠 조작감 | 됨 | 토큰을 :root에 두고 prefers-color-scheme 다크·data-theme 둘 다 정의. 직접 바꾸는 단추는 P4 | PARTIAL | .out/ux/p1-dark.png | S |
 | 48 | I 렌더링 | 98장 픽셀 동일성 | – | 98장 모두 1% 미만(최대 s-03-unfollowed 0.127%, 평균 0.059%) | PASS | `pixel/pixel.json` | – |
 | 49 | J 추가 | 캔버스 안 채팅 패널(claude -p·codex exec, 스트리밍, 취소, 에이전트 선택) | 채팅이 기본 | 없음 | MISSING | 코드 | L |
 | 50 | J 추가 | 댓글을 AI에게 보내 그 위치만 고치기 | 인라인 댓글로 부분 수정 | 없음(선택 '복사'로 붙여 넣기만) | MISSING | 코드 | M |
@@ -95,17 +95,17 @@
 | 54 | J 추가 | 자산 보관함(이미지·폰트 업로드, 재사용) | 업로드 자산 | 없음(`docs/design/assets/` 정적 서빙만) | MISSING | 코드 | M |
 | 55 | J 추가 | 접근성 검사(누르는 영역·명암비·label) | Claude에게 리뷰 요청 | 없음 | MISSING | 코드 | M |
 | 56 | J 추가 | 한글 IME | 조합 중 Enter·blur에 깨지지 않음 | 글자 편집 Enter 처리에 `isComposing` 확인이 없어 조합 중 Enter에 확정·저장될 수 있음. 실제 IME는 자동화로 시험 못 함 | PARTIAL | 코드: `onTextEdit` onKey | S |
-| 57 | J 추가 | 캔버스 조작 실행 취소 | 됨 | 보드 이동·크기·메모·페이지는 실행 취소 없음(HTML 편집만) | MISSING | 코드 | M |
+| 57 | J 추가 | 캔버스 조작 실행 취소 | 됨 | 서버 한 기록(history.mjs)에 HTML 편집·보드 이동/크기/옵션/순서·메모·페이지·보드 만들기/삭제/복제/이름이 시간순으로 쌓임. ⌘Z/⌘⇧Z·도구 막대·우클릭·토스트에서 실행 취소, 밖에서 바뀌면 409로 기록 비움 | PASS | e2e `boards.e2e.mjs` 'HTML 편집 → 보드 옮기기 → ⌘Z 두 번이 역순'; 단위 17개 통과; .out/ux/p1-57-undo-toast.png | M |
 | 58 | J 추가 | board.json 충돌 최소화 | – | 보드·메모 키를 정렬하고 항목 하나를 한 줄로, 항목 사이 빈 줄 하나. 서버가 저장할 때 항상 이 형식. 기존 board.json은 값은 그대로 형식만 다시 씀(865→324줄) | PASS | 단위 테스트 boardFormat: 값 동일·한 줄·정렬·다시 써도 같음, git merge-file 병합 3가지(이웃 보드 각각 이동·메모 각각 추가·이동+메모) 충돌 0 | S |
 | 59 | J 추가 | HTML 이름 바꾸기·삭제 따라가기 | – | 이름을 바꾸면 새 보드가 자동 배치되고 옛 보드는 '파일 없음'과 '파일 없는 보드 1'로 표시. 따라가거나 정리하는 동작 없음 | PARTIAL | `J59.rename_result`, `J59.missing_badge` | S |
 | 60 | J 추가 | 요소를 다른 보드로 복사·붙여넣기 | 됨 | 없음 | MISSING | 코드 | M |
-| 61 | J 추가 | 보드 검색·이동 | – | 없음 | MISSING | 코드 | S |
+| 61 | J 추가 | 보드 검색·이동 | – | 왼쪽 패널 '보드 찾기(⌘K)': 제목·파일 이름으로 거르고 Enter로 첫 보드로 이동·선택, Esc로 비움 | PASS | ux 스크립트: '결제' 3개, Enter → scr-11 선택; .out/ux/p1-61-search.png | S |
 | 62 | J 추가 | Windows 경로·감시 | – | 코드상 `path.sep`으로 나누고 URL은 `/`로 맞춤, chokidar 사용. 실제 Windows 미시험 | PARTIAL | 코드: `watch.mjs`, `safeJoin` | S |
 | 63 | J 추가 | 보안(127.0.0.1, 경로 탈출) | – | 127.0.0.1에만 열림, `/screens/..%2F` 404, `/api/file?f=../` 400 | PASS | `J63.*` | S |
 | 64 | J 추가 | 원자적 쓰기(임시 파일 → 교체) | – | HTML·board.json·comments.json을 같은 폴더 임시 파일(.dc-tmp-*)에 쓴 뒤 rename. 권한 유지, 실패하면 임시 파일 지움. 감시기는 .으로 시작하는 파일 무시 | PASS | 단위 테스트 fsutil 2개, e2e core: 편집 뒤 .dc-tmp 없음·임시 파일 rename에도 감시 반영 1초 안 | S |
-| 65 | J 추가 | 우클릭 메뉴(보드·요소·빈 캔버스) | 됨 | 없음(브라우저 기본 메뉴) | MISSING | `J65.context_menu_custom`=0 | M |
-| 66 | J 추가 | 캔버스 상태 기억(확대·위치·페이지·패널) | 됨 | 없음(localStorage 비어 있음) | MISSING | `J66.local_storage_keys`=[] | S |
-| 67 | J 추가 | 미니맵·보드 목록 패널 | 레이어·보드 탐색 | 없음 | MISSING | 코드 | M |
+| 65 | J 추가 | 우클릭 메뉴(보드·요소·빈 캔버스) | 됨 | 보드(편집·Play·전체 화면·이동·이름·파일 이름·복제·맨 앞/뒤·삭제), 메모(복제·삭제), 빈 캔버스(여기에 보드·제목·메모, 모두 선택, 전체 보기, 100%, 실행 취소/다시), 편집 중 요소(글자 고치기·부모 선택·AI용 설명 복사·복제·삭제). 단축키 표시, 화살표·Enter·Esc | PASS | ux 스크립트: Esc로 닫힘 true; .out/ux/p1-65-menu-{board,canvas,element}.png — role=menu, 32px 행, 위험 항목 빨강 | M |
+| 66 | J 추가 | 캔버스 상태 기억(확대·위치·페이지·패널) | 됨 | 확대·위치·페이지·왼쪽 패널·미니맵을 localStorage(design-canvas:<제목>)에 기억, 다시 열면 되살림(launch 설정이 우선) | PASS | ux 스크립트: 다시 열기 전후 확대 같음(34%→34%) | S |
+| 67 | J 추가 | 미니맵·보드 목록 패널 | 레이어·보드 탐색 | 왼쪽 패널: 페이지 목록(보드 수)·보드 목록(파일 없음 경고), 누르면 그 보드로 이동. 미니맵(M): 보드 배치·선택·지금 화면 사각형, 누르거나 끌면 그 자리로 | PASS | .out/ux/p1-09-board-options.png(왼쪽 목록·미니맵), p1-dark.png(다크) | M |
 | 68 | 도움말 | F6·Shift+F6 영역 이동, Tab·Space·Return 보드·레이어 탐색 | 키보드·화면 읽기 지원 | 없음 | MISSING | 코드 | M |
 | 69 | 도움말 | Option+화살표로 레이어 이동 | 됨 | 없음 | MISSING | 코드 | S |
 | 70 | 도움말 | ⌘\ 속성 패널 열고 닫기 | 됨 | 없음(패널 항상 보임) | MISSING | 코드 | S |

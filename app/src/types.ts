@@ -9,7 +9,19 @@ export type BoardItem = {
   title?: string;
   page?: string;
   autoPlaced?: boolean;
+  /** 모서리 px */
+  radius?: number;
+  /** 틀(그림자·이름표) 없이 */
+  frameless?: boolean;
+  /** 눌러 보는 보드: 파란 표시와 Play 버튼 */
+  is_interactive?: boolean;
+  /** 페이지형: 전체 화면 보기에서 창을 채우고 스크롤 */
+  expand?: "fill";
 };
+
+export type Launch = { view: "canvas" | "focused"; file?: string; page?: string };
+
+export type Tool = "select" | "hand" | "board" | "title" | "sticky";
 
 export type Note = {
   kind: "title" | "sticky";
@@ -30,6 +42,7 @@ export type Board = {
   boards: Record<string, BoardItem>;
   order: string[];
   notes: Record<string, Note>;
+  launch?: Launch;
 };
 
 export type BoardResponse = { board: Board; files: string[]; missing: string[]; dir: string };

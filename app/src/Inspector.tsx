@@ -1,6 +1,6 @@
 // AI-generated with Claude Code, 2026-10-09, reviewed by Hyun Park
 // 오른쪽 패널: 선택 정보·복사·스크린샷, 댓글. (M5에서 속성·레이어가 붙는다)
-import { useState, type ReactNode } from "react";
+import { Children, useState, type ReactNode } from "react";
 
 import { api } from "./api";
 import { describe } from "./editor";
@@ -52,7 +52,16 @@ export function Inspector(props: {
   return (
     <aside className="inspector">
       {!props.file ? (
-        <p className="muted">보드를 고르세요. 보드를 더블클릭하면 편집 모드가 돼요.</p>
+        Children.toArray(props.children).length ? props.children : (
+          <div className="inspector-empty">
+            <p className="muted">보드를 고르면 옵션이 여기 나와요.</p>
+            <ul className="muted">
+              <li><kbd>B</kbd> 보드 그리기 · <kbd>T</kbd> 제목 · <kbd>N</kbd> 메모</li>
+              <li>더블클릭 또는 <kbd>E</kbd> 편집 · <kbd>F</kbd> 전체 화면</li>
+              <li>우클릭으로 메뉴 · <kbd>⌘K</kbd> 보드 찾기</li>
+            </ul>
+          </div>
+        )
       ) : (
         <>
           <section>

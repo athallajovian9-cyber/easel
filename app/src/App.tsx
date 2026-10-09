@@ -1,38 +1,126 @@
 // AI-generated with Claude Code, 2026-10-09, reviewed by Hyun Park
-// 앱 셸: board.json 상태, 페이지 탭, 도구 막대, 저장. PLAN.md 5장.
+// 앱 셸: board.json 상태, 도구 막대, 왼쪽(페이지·보드)·오른쪽(검사기) 패널, 우클릭 메뉴, 하나의 실행 취소 기록. PLAN.md 5장.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { api, clientId, connectEvents, type ServerEvent } from "./api";
-import { Canvas, fitView, isTyping } from "./Canvas";
+import { Canvas, clamp, fitView, isTyping, MAX_ZOOM, MIN_ZOOM, type ContextTarget, type Rect } from "./Canvas";
 import { elementAt, inlineStyles, rectOf } from "./editor";
+import { Icon, type IconName } from "./icons";
 import { Inspector, type Comment } from "./Inspector";
 import { Layers } from "./Layers";
+import { BoardOptions, FocusView, LeftPanel, Minimap } from "./panels";
 import { Play } from "./Play";
 import { Properties } from "./Properties";
+import { ContextMenu, Dialog, useDialog, useToast, type MenuItem, type MenuState } from "./ui";
 import { useEditMode } from "./useEditMode";
-import type { Board, BoardItem, BoardResponse, Note, View } from "./types";
+import type { Board, BoardItem, BoardResponse, Note, Tool, View } from "./types";
 
-const SAVE_DELAY = 300;
+const DRAFT_SAVE_DELAY = 400;
+const mod = navigator.platform.includes("Mac") ? "⌘" : "Ctrl+";
+
+type Saved = { view?: View; page?: string | null; left?: boolean; minimap?: boolean };
+const stateKey = (title: string) => `design-canvas:${title}`;
+function loadSaved(title: string): Saved {
+  try {
+    return JSON.parse(localStorage.getItem(stateKey(title)) ?? "{}");
+  } catch {
+    return {};
+  }
+}
+
+const TOOLS: { id: Tool; icon: IconName; label: string; key: string }[] = [
+  { id: "select", icon: "select", label: "선택", key: "V" },
+  { id: "hand", icon: "hand", label: "손(이동)", key: "H" },
+  { id: "board", icon: "board", label: "보드 그리기", key: "B" },
+  { id: "title", icon: "title", label: "제목", key: "T" },
+  { id: "sticky", icon: "sticky", label: "메모", key: "N" },
+];
 
 export function App() {
   const [data, setData] = useState<BoardResponse | null>(null);
   const [board, setBoard] = useState<Board | null>(null);
   const [view, setView] = useState<View>({ x: 0, y: 0, zoom: 0.1 });
   const [page, setPage] = useState<string | null>(null);
-  const [selectedBoard, setSelectedBoard] = useState<string | null>(null);
+  const [tool, setTool] = useState<Tool>("select");
+  const [selected, setSelected] = useState<string[]>([]);
   const [selectedNote, setSelectedNote] = useState<string | null>(null);
   const [editFile, setEditFile] = useState<string | null>(null);
   const [playFile, setPlayFile] = useState<string | null>(null);
+  const [focusFile, setFocusFile] = useState<string | null>(null);
+  const [leftOpen, setLeftOpen] = useState(true);
+  const [minimapOpen, setMinimapOpen] = useState(true);
+  const [menu, setMenu] = useState<MenuState>(null);
+  const [hist, setHist] = useState({ canUndo: false, canRedo: false, undo: [] as string[], redo: [] as string[] });
   const [reloadKeys, setReloadKeys] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
   const [canvasSize, setCanvasSize] = useState<{ w: number; h: number } | null>(null);
-  const fitted = useRef(false);
+  const [comments, setComments] = useState<Comment[]>([]);
+  const restored = useRef(false);
   const frames = useRef(new Map<string, HTMLIFrameElement>());
   const [frameTick, setFrameTick] = useState(0);
-  const [comments, setComments] = useState<Comment[]>([]);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const toast = useToast();
+  const ask = useDialog();
   const getFrame = useCallback((f: string) => frames.current.get(f) ?? null, [frameTick]);
   const editRef = useRef<ReturnType<typeof useEditMode> | null>(null);
-  /** 원본 패치 요청(해시가 다르면 서버가 거부) */
+  const boardRef = useRef<Board | null>(null);
+  boardRef.current = board;
+  const draftTimer = useRef<number | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const d = await api.board();
+      setData(d);
+      setBoard(d.board);
+      setError(null);
+    } catch (e) {
+      setError(String((e as Error).message));
+    }
+  }, []);
+  const loadComments = useCallback(() => api.get<{ comments: Comment[] }>("/api/comments").then((r) => setComments(r.comments)).catch(() => {}), []);
+  const loadHistory = useCallback(() => api.get<typeof hist>("/api/history").then(setHist).catch(() => {}), []);
+
+  useEffect(() => {
+    void load();
+    void loadComments();
+    void loadHistory();
+  }, [load, loadComments, loadHistory]);
+
+  /* ---------- 저장·실행 취소 ---------- */
+  /** 상태를 바꾼다. label이 있으면 바로 저장하고 실행 취소 기록에 남긴다. "draft"는 기록 없이 조금 뒤 저장(글자 입력 중) */
+  const update = useCallback(
+    (fn: (b: Board) => Board, label?: string | "draft") => {
+      const prev = boardRef.current;
+      if (!prev) return;
+      const next = fn(prev);
+      boardRef.current = next;
+      setBoard(next);
+      if (!label) return;
+      if (draftTimer.current) window.clearTimeout(draftTimer.current);
+      const save = () => api.saveBoard(boardRef.current!, label === "draft" ? undefined : label).catch((e) => toast({ tone: "error", text: `저장 실패: ${e.message}` }));
+      if (label === "draft") draftTimer.current = window.setTimeout(save, DRAFT_SAVE_DELAY);
+      else void save();
+    },
+    [toast],
+  );
+
+  const undoRedo = useCallback(
+    async (dir: "undo" | "redo") => {
+      try {
+        const r = await api.post<{ label: string | null }>(`/api/history/${dir}`, {});
+        if (r.label) toast({ text: `${dir === "undo" ? "실행 취소" : "다시 실행"}: ${r.label}` });
+        else toast({ text: dir === "undo" ? "되돌릴 작업이 없어요" : "다시 할 작업이 없어요" });
+        await load();
+      } catch (e) {
+        toast({ tone: "error", text: String((e as Error).message) });
+      }
+      void loadHistory();
+    },
+    [toast, load, loadHistory],
+  );
+  const undoAction = { label: "실행 취소", run: () => void undoRedo("undo") };
+
+  /* ---------- HTML 편집 ---------- */
   const doEdit = useCallback(
     async (payload: Record<string, unknown>) => {
       if (!editFile) return false;
@@ -41,12 +129,13 @@ export function App() {
         return true;
       } catch (e) {
         editRef.current?.setError(String((e as Error).message));
+        toast({ tone: "error", text: String((e as Error).message) });
         return false;
       }
     },
-    [editFile],
+    [editFile, toast],
   );
-  /** 더블클릭: 글자 하나만 있는 요소를 그 자리에서 고친다. Enter·포커스 이탈에 setText */
+  /** 더블클릭: 글자 하나만 있는 요소를 그 자리에서 고친다. 한글 조합 중 Enter는 무시 */
   const onTextEdit = useCallback(
     (el: HTMLElement, path: string) => {
       if (el.children.length) {
@@ -74,6 +163,7 @@ export function App() {
         if (!(await doEdit({ op: "setText", path, hash, text }))) el.textContent = before;
       };
       const onKey = (e: KeyboardEvent) => {
+        if (e.isComposing) return;
         if (e.key === "Enter" && !e.shiftKey) {
           e.preventDefault();
           el.blur();
@@ -87,155 +177,394 @@ export function App() {
     },
     [editFile, doEdit],
   );
-  const edit = useEditMode(editFile, getFrame, { onTextEdit });
+  const onElementContext = useCallback((path: string, at: { clientX: number; clientY: number }) => elementMenuRef.current?.(path, at), []);
+  const elementMenuRef = useRef<((path: string, at: { clientX: number; clientY: number }) => void) | null>(null);
+  const edit = useEditMode(editFile, getFrame, { onTextEdit, onContext: onElementContext });
   editRef.current = edit;
-  const loadComments = useCallback(() => api.get<{ comments: Comment[] }>("/api/comments").then((r) => setComments(r.comments)).catch(() => {}), []);
-  const saveTimer = useRef<number | null>(null);
-  const boardRef = useRef<Board | null>(null);
-  boardRef.current = board;
 
-  const load = useCallback(async (fit: boolean) => {
-    try {
-      const d = await api.board();
-      setData(d);
-      setBoard(d.board);
-      setError(null);
-    } catch (e) {
-      setError(String((e as Error).message));
-    }
-  }, []);
-
-  useEffect(() => {
-    void load(true);
-    void loadComments();
-  }, [load, loadComments]);
-
-  // 처음 한 번: 보드와 캔버스 크기를 둘 다 알면 전체 보기
-  useEffect(() => {
-    if (fitted.current || !board || !canvasSize) return;
-    fitted.current = true;
-    setView(fitView(Object.values(board.boards), canvasSize));
-  }, [board, canvasSize]);
-
-  /** 상태를 바꾸고 잠시 뒤 board.json에 저장 */
-  const update = useCallback((fn: (b: Board) => Board, saveNow = false) => {
-    setBoard((prev) => {
-      if (!prev) return prev;
-      const next = fn(prev);
-      boardRef.current = next;
-      return next;
-    });
-    if (saveTimer.current) window.clearTimeout(saveTimer.current);
-    saveTimer.current = window.setTimeout(
-      () => {
-        if (boardRef.current) api.saveBoard(boardRef.current).catch((e) => setError(`저장 실패: ${e.message}`));
-      },
-      saveNow ? 0 : SAVE_DELAY,
-    );
-  }, []);
-
-  // 서버 알림: 파일이 바뀐 보드만 다시 불러오고, 다른 창에서 board.json이 바뀌면 다시 읽는다
+  // 서버 알림: 바뀐 파일의 보드만 다시 그리고, board.json이 밖에서 바뀌면 다시 읽는다
   useEffect(
     () =>
       connectEvents((e: ServerEvent) => {
         if (e.type === "file-changed") {
           setReloadKeys((k) => ({ ...k, [e.file]: (k[e.file] ?? 0) + 1 }));
-          if (e.kind !== "change") void load(false);
-        } else if (e.type === "board-changed" && e.source !== clientId) void load(false);
+          if (e.kind !== "change") void load();
+        } else if (e.type === "board-changed" && e.source !== clientId) void load();
         else if (e.type === "comments-changed") void loadComments();
+        else if (e.type === "history-changed") void loadHistory();
       }),
-    [load, loadComments],
+    [load, loadComments, loadHistory],
   );
 
+  /* ---------- 페이지·보이는 것 ---------- */
   const pages = board?.pages ?? [];
-  const currentPage = page ?? pages[0]?.id ?? null;
-  const onPage = useCallback(
-    (item: { page?: string }) => !pages.length || (item.page ?? pages[0].id) === currentPage,
-    [pages, currentPage],
-  );
+  const currentPage = pages.find((p) => p.id === page)?.id ?? pages[0]?.id ?? null;
+  const onPage = useCallback((item: { page?: string }) => !pages.length || (item.page ?? pages[0].id) === currentPage, [pages, currentPage]);
   const visibleBoards = useMemo(() => (board ? board.order.filter((f) => board.boards[f] && onPage(board.boards[f])) : []), [board, onPage]);
   const visibleNotes = useMemo(() => (board ? Object.keys(board.notes).filter((id) => onPage(board.notes[id])) : []), [board, onPage]);
+  const size = canvasSize ?? { w: window.innerWidth, h: window.innerHeight - 48 };
 
+  // 처음 한 번: 저장해 둔 화면(확대·위치·페이지·패널)을 되살리거나 전체 보기. 시작 설정이 있으면 따른다
+  useEffect(() => {
+    if (restored.current || !board || !canvasSize) return;
+    restored.current = true;
+    const s = loadSaved(board.title);
+    if (s.left != null) setLeftOpen(s.left);
+    if (s.minimap != null) setMinimapOpen(s.minimap);
+    const launch = board.launch;
+    if (launch?.page) setPage(launch.page);
+    else if (s.page) setPage(s.page);
+    if (launch?.view === "focused" && launch.file && board.boards[launch.file]) setFocusFile(launch.file);
+    if (s.view && !launch?.page) setView(s.view);
+    else setView(fitView(Object.values(board.boards), canvasSize));
+  }, [board, canvasSize]);
+  // 화면 상태 기억
+  useEffect(() => {
+    if (!board || !restored.current) return;
+    const t = window.setTimeout(() => {
+      try {
+        localStorage.setItem(stateKey(board.title), JSON.stringify({ view, page: currentPage, left: leftOpen, minimap: minimapOpen } satisfies Saved));
+      } catch {
+        /* 저장 못 해도 동작에는 지장 없음 */
+      }
+    }, 300);
+    return () => window.clearTimeout(t);
+  }, [view, currentPage, leftOpen, minimapOpen, board?.title]);
+
+  const noteRect = (n: Note) => ({ x: n.x, y: n.y, w: n.w ?? n.maxW ?? 400, h: n.kind === "title" ? 90 : 200 });
   const fitAll = () => {
     if (!board) return;
-    const rects = [
-      ...visibleBoards.map((f) => board.boards[f]),
-      ...visibleNotes.map((id) => {
-        const n = board.notes[id];
-        return { x: n.x, y: n.y, w: n.w ?? n.maxW ?? 400, h: n.kind === "title" ? 90 : 200 };
-      }),
-    ];
-    setView(fitView(rects, canvasSize ?? { w: window.innerWidth, h: window.innerHeight - 48 }));
+    setView(fitView([...visibleBoards.map((f) => board.boards[f]), ...visibleNotes.map((id) => noteRect(board.notes[id]))], size));
   };
-  const goSelected = () => {
-    if (!board || !selectedBoard) return;
-    const b = board.boards[selectedBoard];
-    setView(fitView([b], canvasSize ?? { w: window.innerWidth, h: window.innerHeight - 48 }, 80));
+  const goTo = (files: string[]) => {
+    if (!board || !files.length) return;
+    setView(fitView(files.map((f) => board.boards[f]).filter(Boolean), size, 80));
   };
+  const zoomBy = (k: number) =>
+    setView((v) => {
+      const z = clamp(v.zoom * k, MIN_ZOOM, MAX_ZOOM);
+      const cx = size.w / 2;
+      const cy = size.h / 2;
+      return { zoom: z, x: cx - ((cx - v.x) / v.zoom) * z, y: cy - ((cy - v.y) / v.zoom) * z };
+    });
+  const zoomTo = (z: number) => zoomBy(z / view.zoom);
 
-  const addNote = (kind: Note["kind"]) => {
+  /* ---------- 보드 조작 ---------- */
+  const select = (files: string[], m: "replace" | "toggle" | "add" = "replace") => {
+    setSelected((cur) => (m === "replace" ? files : m === "add" ? [...new Set([...cur, ...files])] : files.reduce((a, f) => (a.includes(f) ? a.filter((x) => x !== f) : [...a, f]), cur)));
+    if (files.length) setSelectedNote(null);
+  };
+  const pageField = () => (pages.length && currentPage ? { page: currentPage } : {});
+
+  const createBoard = async (r: Rect) => {
+    try {
+      const { file } = await api.post<{ file: string }>("/api/boards/create", { ...r, ...pageField() });
+      await load();
+      setSelected([file]);
+      setTool("select");
+      toast({ tone: "ok", text: `보드 ${file}를 만들었어요`, action: undoAction });
+    } catch (e) {
+      toast({ tone: "error", text: `보드를 만들지 못했어요: ${(e as Error).message}` });
+    }
+  };
+  const deleteBoards = async (files: string[]) => {
+    if (!files.length || !board) return;
+    const names = files.map((f) => board.boards[f]?.title ?? f);
+    const ok = await ask.confirm({
+      title: files.length > 1 ? `보드 ${files.length}개를 지울까요?` : `"${names[0]}" 보드를 지울까요?`,
+      body: "HTML 파일도 함께 지워져요. 휴지통(docs/design/.trash)에 사본이 남고, 바로 실행 취소(⌘Z)로 되살릴 수 있어요.",
+      ok: "지우기",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api.post("/api/boards/delete", { files });
+      if (editFile && files.includes(editFile)) setEditFile(null);
+      setSelected([]);
+      await load();
+      toast({ text: `보드 ${files.length}개를 지웠어요`, action: undoAction });
+    } catch (e) {
+      toast({ tone: "error", text: String((e as Error).message) });
+    }
+  };
+  const duplicateBoard = async (file: string) => {
+    try {
+      const r = await api.post<{ file: string }>("/api/boards/duplicate", { file });
+      await load();
+      setSelected([r.file]);
+      toast({ tone: "ok", text: `${r.file}로 복제했어요`, action: undoAction });
+    } catch (e) {
+      toast({ tone: "error", text: String((e as Error).message) });
+    }
+  };
+  const renameBoard = async (file: string) => {
+    const b = boardRef.current?.boards[file];
+    if (!b) return;
+    const r = await ask.prompt({ title: "보드 이름 바꾸기", label: "이름", value: b.title ?? file.replace(/\.html$/, ""), ok: "바꾸기" });
+    if (!r || r.value.trim() === (b.title ?? "")) return;
+    try {
+      await api.post("/api/boards/rename", { file, title: r.value.trim() });
+      await load();
+      toast({ tone: "ok", text: "이름을 바꿨어요", action: undoAction });
+    } catch (e) {
+      toast({ tone: "error", text: String((e as Error).message) });
+    }
+  };
+  const renameFile = async (file: string) => {
+    const { refs } = await api.get<{ refs: { file: string; count: number }[] }>(`/api/boards/refs?file=${encodeURIComponent(file)}`).catch(() => ({ refs: [] }));
+    const r = await ask.prompt({
+      title: "파일 이름 바꾸기",
+      label: "파일 이름",
+      value: file,
+      hint: refs.length ? `이 파일을 링크·iframe으로 가리키는 곳: ${refs.map((x) => x.file).join(", ")}` : "이 파일을 가리키는 링크·iframe은 없어요.",
+      ok: "바꾸기",
+      extra: refs.length ? { label: `참조 ${refs.reduce((a, x) => a + (x.count ?? 1), 0)}곳도 새 이름으로 바꾸기`, checked: true } : undefined,
+    });
+    if (!r) return;
+    let newFile = r.value.trim();
+    if (!newFile.endsWith(".html")) newFile += ".html";
+    if (newFile === file) return;
+    try {
+      await api.post("/api/boards/rename", { file, newFile, updateRefs: r.extra });
+      if (editFile === file) setEditFile(newFile);
+      setSelected([newFile]);
+      await load();
+      toast({ tone: "ok", text: `${newFile}로 바꿨어요${r.extra ? " (참조도 갱신)" : ""}`, action: undoAction });
+    } catch (e) {
+      toast({ tone: "error", text: String((e as Error).message) });
+    }
+  };
+  /** 맨 앞(order 끝)·맨 뒤(order 앞)로 */
+  const reorder = (files: string[], to: "front" | "back") =>
+    update((b) => {
+      const rest = b.order.filter((f) => !files.includes(f));
+      const moved = b.order.filter((f) => files.includes(f));
+      return { ...b, order: to === "front" ? [...rest, ...moved] : [...moved, ...rest] };
+    }, to === "front" ? "맨 앞으로" : "맨 뒤로");
+  const patchBoard = (file: string, patch: Partial<BoardItem>, label = "보드 옵션") =>
+    update((b) => {
+      const it: BoardItem = { ...b.boards[file], ...patch };
+      for (const k of Object.keys(it) as (keyof BoardItem)[]) if (it[k] === undefined) delete it[k];
+      return { ...b, boards: { ...b.boards, [file]: it } };
+    }, label);
+  const nudge = (dx: number, dy: number) =>
+    update(
+      (b) => ({ ...b, boards: { ...b.boards, ...Object.fromEntries(selected.map((f) => [f, { ...b.boards[f], x: b.boards[f].x + dx, y: b.boards[f].y + dy }])) } }),
+      "보드 옮기기",
+    );
+
+  /* ---------- 메모 ---------- */
+  const newNoteId = () => {
     let id = "";
     do id = `n${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
     while (boardRef.current?.notes[id]);
-    const cx = (window.innerWidth / 2 - view.x) / view.zoom;
-    const cy = (window.innerHeight / 2 - view.y) / view.zoom;
-    update((b) => ({
-      ...b,
-      notes: {
-        ...b.notes,
-        [id]:
-          kind === "title"
-            ? { kind, x: Math.round(cx), y: Math.round(cy), text: "새 제목", maxW: 2000, ...(currentPage && pages.length ? { page: currentPage } : {}) }
-            : { kind, x: Math.round(cx), y: Math.round(cy), text: "메모", w: 400, ...(currentPage && pages.length ? { page: currentPage } : {}) },
-      },
-    }));
+    return id;
+  };
+  const createNote = (kind: Note["kind"], at: { x: number; y: number }) => {
+    const id = newNoteId();
+    const x = Math.round(at.x);
+    const y = Math.round(at.y);
+    update(
+      (b) => ({
+        ...b,
+        notes: { ...b.notes, [id]: kind === "title" ? { kind, x, y, text: "새 제목", maxW: 2000, ...pageField() } : { kind, x, y, text: "메모", w: 400, ...pageField() } },
+      }),
+      kind === "title" ? "제목 추가" : "메모 추가",
+    );
     setSelectedNote(id);
+    setSelected([]);
+    setTool("select");
+  };
+  const deleteNote = (id: string) => {
+    update((b) => {
+      const { [id]: _, ...rest } = b.notes;
+      return { ...b, notes: rest };
+    }, "메모 삭제");
+    setSelectedNote(null);
+    toast({ text: "메모를 지웠어요", action: undoAction });
   };
 
-  const addPage = () => {
-    const name = prompt("새 페이지 이름", `페이지 ${pages.length + 1}`);
-    if (!name) return;
+  /* ---------- 페이지 ---------- */
+  const addPage = async () => {
+    const r = await ask.prompt({ title: "새 페이지", label: "이름", value: `페이지 ${Math.max(pages.length, 1) + 1}`, ok: "만들기" });
+    if (!r?.value.trim()) return;
     const id = `p${Date.now().toString(36)}`;
-    update((b) => {
-      // 첫 페이지를 만들면 지금 보드·메모는 모두 그 페이지에 그대로 남는다(page 없는 항목 = 첫 페이지)
-      const nextPages = b.pages.length ? [...b.pages, { id, name }] : [{ id: "main", name: "기본" }, { id, name }];
-      return { ...b, pages: nextPages };
-    }, true);
+    // 첫 페이지를 만들면 지금 보드·메모는 모두 '기본' 페이지에 남는다(page 없는 항목 = 첫 페이지)
+    update((b) => ({ ...b, pages: b.pages.length ? [...b.pages, { id, name: r.value.trim() }] : [{ id: "main", name: "기본" }, { id, name: r.value.trim() }] }), "페이지 추가");
     setPage(id);
   };
-  const renamePage = (id: string) => {
+  const renamePage = async (id: string) => {
     const p = pages.find((x) => x.id === id);
-    const name = prompt("페이지 이름", p?.name);
-    if (!name) return;
-    update((b) => ({ ...b, pages: b.pages.map((x) => (x.id === id ? { ...x, name } : x)) }), true);
+    const r = await ask.prompt({ title: "페이지 이름 바꾸기", label: "이름", value: p?.name ?? "", ok: "바꾸기" });
+    if (!r?.value.trim()) return;
+    update((b) => ({ ...b, pages: b.pages.map((x) => (x.id === id ? { ...x, name: r.value.trim() } : x)) }), "페이지 이름 바꾸기");
   };
-  const moveSelectedToPage = (id: string) => {
-    if (!selectedBoard) return;
-    update((b) => ({ ...b, boards: { ...b.boards, [selectedBoard]: { ...b.boards[selectedBoard], page: id } } }), true);
+  const pageMenu = (id: string, at: { clientX: number; clientY: number }) =>
+    setMenu({
+      x: at.clientX,
+      y: at.clientY,
+      title: pages.find((p) => p.id === id)?.name,
+      items: [
+        { label: "이름 바꾸기", icon: "edit", run: () => void renamePage(id) },
+        ...(selected.length ? [{ label: `선택한 보드 ${selected.length}개를 이 페이지로`, icon: "page" as IconName, run: () => update((b) => ({ ...b, boards: { ...b.boards, ...Object.fromEntries(selected.map((f) => [f, { ...b.boards[f], page: id }])) } }), "페이지로 옮기기") }] : []),
+      ],
+    });
+
+  /* ---------- 우클릭 메뉴 ---------- */
+  const boardMenuItems = (file: string): MenuItem[] => {
+    const b = board!.boards[file];
+    const files = selected.includes(file) ? selected : [file];
+    const many = files.length > 1;
+    return [
+      { label: editFile === file ? "편집 끝내기" : "편집", icon: "edit", shortcut: "E", disabled: many, run: () => setEditFile(editFile === file ? null : file) },
+      { label: "Play", icon: "play", disabled: many || !b?.is_interactive, run: () => setPlayFile(file) },
+      { label: "전체 화면 보기", icon: "focus", shortcut: "F", disabled: many, run: () => setFocusFile(file) },
+      { label: "이 보드로 이동", icon: "fit", shortcut: "⇧2", run: () => goTo(files) },
+      "sep",
+      { label: "이름 바꾸기", icon: "title", shortcut: "F2", disabled: many, run: () => void renameBoard(file) },
+      { label: "파일 이름 바꾸기…", icon: "link", disabled: many, run: () => void renameFile(file) },
+      { label: "복제", icon: "copy", shortcut: `${mod}D`, disabled: many, run: () => void duplicateBoard(file) },
+      "sep",
+      { label: "맨 앞으로", icon: "front", shortcut: `${mod}]`, run: () => reorder(files, "front") },
+      { label: "맨 뒤로", icon: "back", shortcut: `${mod}[`, run: () => reorder(files, "back") },
+      "sep",
+      { label: many ? `보드 ${files.length}개 삭제` : "삭제", icon: "trash", shortcut: "⌫", danger: true, run: () => void deleteBoards(files) },
+    ];
+  };
+  const onContext = (t: ContextTarget, at: { clientX: number; clientY: number }) => {
+    if (!board) return;
+    if (t.type === "board") {
+      if (!selected.includes(t.file)) select([t.file]);
+      setMenu({ x: at.clientX, y: at.clientY, title: board.boards[t.file]?.title ?? t.file, items: boardMenuItems(t.file) });
+    } else if (t.type === "note") {
+      setSelectedNote(t.id);
+      setMenu({
+        x: at.clientX,
+        y: at.clientY,
+        title: board.notes[t.id]?.kind === "title" ? "제목" : "메모",
+        items: [
+          { label: "앞에 복제", icon: "copy", shortcut: `${mod}D`, run: () => { const n = board.notes[t.id]; const id = newNoteId(); update((b) => ({ ...b, notes: { ...b.notes, [id]: { ...n, x: n.x + 40, y: n.y + 40 } } }), "메모 복제"); setSelectedNote(id); } },
+          "sep",
+          { label: "삭제", icon: "trash", shortcut: "⌫", danger: true, run: () => deleteNote(t.id) },
+        ],
+      });
+    } else {
+      setMenu({
+        x: at.clientX,
+        y: at.clientY,
+        items: [
+          { label: "여기에 보드 만들기", icon: "board", shortcut: "B", run: () => void createBoard({ x: Math.round(t.x), y: Math.round(t.y), w: 390, h: 844 }) },
+          { label: "여기에 제목", icon: "title", shortcut: "T", run: () => createNote("title", t) },
+          { label: "여기에 메모", icon: "sticky", shortcut: "N", run: () => createNote("sticky", t) },
+          "sep",
+          { label: "이 페이지 모두 선택", icon: "select", shortcut: `${mod}A`, run: () => select(visibleBoards) },
+          { label: "전체 보기", icon: "fit", shortcut: "⇧1", run: fitAll },
+          { label: "100%로 보기", icon: "search", shortcut: `${mod}0`, run: () => zoomTo(1) },
+          "sep",
+          { label: "실행 취소", icon: "undo", shortcut: `${mod}Z`, disabled: !hist.canUndo, run: () => void undoRedo("undo") },
+          { label: "다시 실행", icon: "redo", shortcut: `⇧${mod}Z`, disabled: !hist.canRedo, run: () => void undoRedo("redo") },
+        ],
+      });
+    }
+  };
+  // 편집 중인 보드 안 요소 우클릭
+  elementMenuRef.current = (path, at) => {
+    if (!editFile) return;
+    const getHash = () => api.get<{ hash: string }>(`/api/element?f=${encodeURIComponent(editFile)}&path=${encodeURIComponent(path)}`).then((r) => r.hash);
+    const el = frames.current.get(editFile)?.contentDocument ? elementAt(frames.current.get(editFile)!.contentDocument!, path) : null;
+    const up = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : null;
+    setMenu({
+      x: at.clientX,
+      y: at.clientY,
+      title: el ? `<${el.tagName.toLowerCase()}>` : "요소",
+      items: [
+        { label: "글자 고치기", icon: "edit", disabled: !el || el.children.length > 0, run: () => el && onTextEdit(el as HTMLElement, path) },
+        { label: "부모 선택", icon: "layers", shortcut: "Esc", disabled: up == null, run: () => up != null && void edit.select([up]) },
+        { label: "AI용 설명 복사", icon: "copy", run: () => void navigator.clipboard.writeText(`${editFile} ${path} <${el?.tagName.toLowerCase()}> "${(el?.textContent ?? "").trim().slice(0, 60)}"`).then(() => toast({ tone: "ok", text: "복사했어요" })) },
+        "sep",
+        { label: "복제", icon: "copy", shortcut: `${mod}D`, run: async () => void doEdit({ op: "duplicate", path, hash: await getHash() }) },
+        {
+          label: "삭제",
+          icon: "trash",
+          shortcut: "⌫",
+          danger: true,
+          run: async () => {
+            if (await doEdit({ op: "delete", path, hash: await getHash() })) {
+              void edit.select([]);
+              toast({ text: "요소를 지웠어요", action: undoAction });
+            }
+          },
+        },
+      ],
+    });
   };
 
-  // 단축키: ⌘Z/⌘⇧Z 실행 취소·다시(서버 기록), Delete로 메모 삭제
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (isTyping(e)) return;
-      if (editFile && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
-        e.preventDefault();
-        api.post(e.shiftKey ? "/api/redo" : "/api/undo", { file: editFile }).catch((err) => edit.setError(String(err.message)));
-        return;
-      }
-      if ((e.key === "Delete" || e.key === "Backspace") && selectedNote) {
-        update((b) => {
-          const { [selectedNote]: _, ...rest } = b.notes;
-          return { ...b, notes: rest };
-        }, true);
-        setSelectedNote(null);
-      }
+  /* ---------- 단축키 ---------- */
+  const keyRef = useRef<(e: KeyboardEvent) => void>(() => {});
+  keyRef.current = (e: KeyboardEvent) => {
+    if (!board || ask.state || focusFile || playFile) return;
+    if (isTyping(e) || e.isComposing) return;
+    const cmd = e.metaKey || e.ctrlKey;
+    const k = e.key.toLowerCase();
+    const one = selected.length === 1 ? selected[0] : null;
+    const run = (fn: () => void) => {
+      e.preventDefault();
+      fn();
     };
+    if (cmd && k === "z") return run(() => void undoRedo(e.shiftKey ? "redo" : "undo"));
+    if (cmd && k === "y") return run(() => void undoRedo("redo"));
+    if (cmd && k === "k") return run(() => { setLeftOpen(true); setTimeout(() => searchRef.current?.focus(), 0); });
+    if (cmd && k === "a" && !editFile) return run(() => select(visibleBoards));
+    if (cmd && k === "d" && one && !editFile) return run(() => void duplicateBoard(one));
+    if (cmd && e.key === "]" && selected.length) return run(() => reorder(selected, "front"));
+    if (cmd && e.key === "[" && selected.length) return run(() => reorder(selected, "back"));
+    if (cmd && e.key === "0") return run(() => zoomTo(1));
+    if (cmd && e.key === "1") return run(fitAll);
+    if (cmd && (e.key === "=" || e.key === "+")) return run(() => zoomBy(1.25));
+    if (cmd && e.key === "-") return run(() => zoomBy(0.8));
+    if (cmd && e.key === "\\") return run(() => setLeftOpen((v) => !v));
+    if (cmd) return;
+    if (e.shiftKey && e.code === "Digit1") return run(fitAll);
+    if (e.shiftKey && e.code === "Digit2") return run(() => goTo(selected));
+    if (e.key === "Escape") {
+      if (editFile) return run(() => setEditFile(null));
+      if (tool !== "select") return run(() => setTool("select"));
+      setSelected([]);
+      setSelectedNote(null);
+      return;
+    }
+    if (e.key === "Delete" || e.key === "Backspace") {
+      if (editFile && edit.state.selection) {
+        const sel = edit.state.selection;
+        return run(async () => {
+          if (await doEdit({ op: "delete", path: sel.path, hash: sel.hash })) {
+            void edit.select([]);
+            toast({ text: "요소를 지웠어요", action: undoAction });
+          }
+        });
+      }
+      if (selectedNote) return run(() => deleteNote(selectedNote));
+      if (selected.length && !editFile) return run(() => void deleteBoards(selected));
+      return;
+    }
+    if (e.key.startsWith("Arrow") && selected.length && !editFile) {
+      const d = e.shiftKey ? 10 : 1;
+      return run(() => nudge(e.key === "ArrowLeft" ? -d : e.key === "ArrowRight" ? d : 0, e.key === "ArrowUp" ? -d : e.key === "ArrowDown" ? d : 0));
+    }
+    if (e.key === "F2" && one) return run(() => void renameBoard(one));
+    if (k === "f" && one) return run(() => setFocusFile(one));
+    if (k === "e" && one) return run(() => setEditFile(editFile === one ? null : one));
+    if (k === "m") return run(() => setMinimapOpen((v) => !v));
+    const t = TOOLS.find((x) => x.key.toLowerCase() === k);
+    if (t && !editFile) return run(() => setTool(t.id));
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => keyRef.current(e);
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selectedNote, update, editFile, edit]);
+  }, []);
 
-  /** 보드 위 오버레이: 편집 중이면 외곽선·선택, 댓글 핀 */
+  /* ---------- 보드 위 오버레이: 편집 외곽선·선택, 댓글 핀 ---------- */
   const renderOverlay = (f: string) => {
     const pins = comments.filter((c) => c.file === f && !c.resolved);
     const doc = frames.current.get(f)?.contentDocument;
@@ -263,146 +592,246 @@ export function App() {
     );
   };
 
-  if (!board || !data) return <div className="loading">{error ?? "불러오는 중…"}</div>;
+  if (!board || !data)
+    return (
+      <div className="loading" role="status">
+        {error ? (
+          <>
+            <Icon name="warn" /> 불러오지 못했어요: {error}
+            <button onClick={() => void load()}>다시 시도</button>
+          </>
+        ) : (
+          <>
+            <span className="spinner" aria-hidden="true" /> 보드를 불러오는 중…
+          </>
+        )}
+      </div>
+    );
+
+  const one = selected.length === 1 ? selected[0] : null;
+  const rects = visibleBoards.map((f) => ({ file: f, ...board.boards[f] }));
 
   return (
     <div className="app">
-      <header className="toolbar">
+      <header className="toolbar" role="toolbar" aria-label="도구">
+        <button className={`icon-btn ${leftOpen ? "on" : ""}`} aria-label="왼쪽 패널" aria-pressed={leftOpen} title={`왼쪽 패널 (${mod}\\)`} onClick={() => setLeftOpen((v) => !v)}>
+          <Icon name="panel" style={{ transform: "scaleX(-1)" }} />
+        </button>
         <strong className="app-title">{board.title}</strong>
-        <nav className="pages">
-          {pages.map((p) => (
-            <button key={p.id} className={`tab ${p.id === currentPage ? "on" : ""}`} onClick={() => setPage(p.id)} onDoubleClick={() => renamePage(p.id)}>
-              {p.name}
+        <div className="tool-group" role="radiogroup" aria-label="캔버스 도구">
+          {TOOLS.map((t) => (
+            <button key={t.id} role="radio" aria-checked={tool === t.id} aria-label={`${t.label} (${t.key})`} title={`${t.label} (${t.key})`} className={`icon-btn ${tool === t.id ? "on" : ""}`} disabled={!!editFile && t.id !== "select" && t.id !== "hand"} onClick={() => setTool(t.id)}>
+              <Icon name={t.icon} />
             </button>
           ))}
-          <button className="tab add" onClick={addPage} title="페이지 추가">
-            + 페이지
+        </div>
+        <div className="tool-group">
+          <button className="icon-btn" aria-label="실행 취소" title={hist.undo.length ? `실행 취소: ${hist.undo[hist.undo.length - 1]} (${mod}Z)` : `실행 취소 (${mod}Z)`} disabled={!hist.canUndo} onClick={() => void undoRedo("undo")}>
+            <Icon name="undo" />
           </button>
-        </nav>
-        <div className="spacer" />
-        {selectedBoard && pages.length > 0 && (
-          <select value="" onChange={(e) => e.target.value && moveSelectedToPage(e.target.value)} title="선택 보드를 다른 페이지로">
-            <option value="">페이지로 옮기기…</option>
-            {pages.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+          <button className="icon-btn" aria-label="다시 실행" title={hist.redo.length ? `다시 실행: ${hist.redo[hist.redo.length - 1]} (⇧${mod}Z)` : `다시 실행 (⇧${mod}Z)`} disabled={!hist.canRedo} onClick={() => void undoRedo("redo")}>
+            <Icon name="redo" />
+          </button>
+        </div>
+        {editFile && (
+          <span className="editing-chip">
+            <Icon name="edit" size={14} /> {board.boards[editFile]?.title ?? editFile} 편집 중
+            <button className="icon-btn sm" aria-label="편집 끝내기" title="편집 끝내기 (Esc)" onClick={() => setEditFile(null)}>
+              <Icon name="close" size={14} />
+            </button>
+          </span>
         )}
-        <button onClick={() => addNote("title")}>+ 제목</button>
-        <button onClick={() => addNote("sticky")}>+ 메모</button>
-        <button onClick={fitAll}>전체 보기</button>
-        <button onClick={goSelected} disabled={!selectedBoard}>
-          선택 보드로
-        </button>
-        <span className="zoom">{Math.round(view.zoom * 100)}%</span>
+        <div className="spacer" />
         {data.missing.length > 0 && (
           <span className="warn" title={data.missing.join("\n")}>
-            파일 없는 보드 {data.missing.length}
+            <Icon name="warn" size={14} /> 파일 없는 보드 {data.missing.length}
           </span>
         )}
         {error && <span className="warn">{error}</span>}
+        <div className="tool-group">
+          <button className="icon-btn" aria-label="축소" title={`축소 (${mod}-)`} onClick={() => zoomBy(0.8)}>
+            <span className="glyph">−</span>
+          </button>
+          <button className="zoom" aria-label="100%로 보기" title={`100%로 보기 (${mod}0)`} onClick={() => zoomTo(1)}>
+            {Math.round(view.zoom * 100)}%
+          </button>
+          <button className="icon-btn" aria-label="확대" title={`확대 (${mod}+)`} onClick={() => zoomBy(1.25)}>
+            <Icon name="plus" />
+          </button>
+          <button className="icon-btn" aria-label="전체 보기" title="전체 보기 (⇧1)" onClick={fitAll}>
+            <Icon name="fit" />
+          </button>
+          <button className={`icon-btn ${minimapOpen ? "on" : ""}`} aria-label="미니맵" aria-pressed={minimapOpen} title="미니맵 (M)" onClick={() => setMinimapOpen((v) => !v)}>
+            <Icon name="map" />
+          </button>
+        </div>
       </header>
       <div className="main">
-      <Canvas
-        board={board}
-        files={data.files}
-        view={view}
-        setView={setView}
-        visibleBoards={visibleBoards}
-        visibleNotes={visibleNotes}
-        selectedBoard={selectedBoard}
-        selectedNote={selectedNote}
-        editFile={editFile}
-        reloadKeys={reloadKeys}
-        onSelectBoard={(f) => {
-          setSelectedBoard(f);
-          if (f) setSelectedNote(null);
-        }}
-        onSelectNote={(id) => {
-          setSelectedNote(id);
-          if (id) setSelectedBoard(null);
-        }}
-        onMoveBoard={(f, patch: Partial<BoardItem>, done) =>
-          update((b) => ({ ...b, boards: { ...b.boards, [f]: { ...b.boards[f], ...patch, autoPlaced: undefined } } }), done)
-        }
-        onMoveNote={(id, patch, done) => update((b) => ({ ...b, notes: { ...b.notes, [id]: { ...b.notes[id], ...patch } } }), done)}
-        onDeleteNote={(id) => {
-          update((b) => {
-            const { [id]: _, ...rest } = b.notes;
-            return { ...b, notes: rest };
-          }, true);
-          setSelectedNote(null);
-        }}
-        onPlay={setPlayFile}
-        onEdit={(f) => {
-          setEditFile(f);
-          if (f) setSelectedBoard(f);
-        }}
-        onSize={setCanvasSize}
-        renderBoardOverlay={renderOverlay}
-        iframeRef={(f, el) => {
-          // ref 콜백은 렌더마다 null → el로 다시 불린다. 정말 새 iframe일 때만 갱신한다
-          if (el && frames.current.get(f) !== el) {
-            frames.current.set(f, el);
-            setFrameTick((t) => t + 1);
-          }
-        }}
-      />
-      <Inspector
-        file={editFile ?? selectedBoard}
-        editing={!!editFile}
-        selection={edit.state.selection}
-        multi={edit.state.paths.length}
-        error={edit.state.error}
-        comments={comments}
-        onSelectPath={(p) => editFile && void edit.select([p])}
-      >
-        {editFile && edit.state.selection && edit.state.selection.file === editFile && (() => {
-          const sel = edit.state.selection;
-          const el = frames.current.get(editFile)?.contentDocument ? elementAt(frames.current.get(editFile)!.contentDocument!, sel.path) : null;
-          const attrs: Record<string, string> = {};
-          if (el) for (const a of Array.from(el.attributes)) attrs[a.name] = a.value;
-          const paths = edit.state.paths;
-          return (
-            <Properties
-              selection={sel}
-              inline={el ? inlineStyles(el) : {}}
-              attrs={attrs}
-              canWrap={paths.length >= 2}
-              onStyle={(prop, value) => void doEdit({ op: "setStyle", path: sel.path, hash: sel.hash, prop, value })}
-              onAttr={(name, value) => void doEdit({ op: "setAttr", path: sel.path, hash: sel.hash, name, value })}
-              onDuplicate={() => void doEdit({ op: "duplicate", path: sel.path, hash: sel.hash })}
-              onDelete={async () => {
-                if (await doEdit({ op: "delete", path: sel.path, hash: sel.hash })) void edit.select([]);
-              }}
-              onWrap={async (display) => {
-                const ordered = [...paths].sort((a, b) => Number(a.split("/").pop()) - Number(b.split("/").pop()));
-                const hashes = await Promise.all(ordered.map((p) => api.get<{ hash: string }>(`/api/element?f=${encodeURIComponent(editFile)}&path=${encodeURIComponent(p)}`).then((r) => r.hash)));
-                if (await doEdit({ op: "wrap", paths: ordered, hashes, display })) void edit.select([ordered[0]]);
-              }}
-            />
-          );
-        })()}
-        {editFile && (
-          <Layers
-            file={editFile}
-            version={reloadKeys[editFile] ?? 0}
-            selected={edit.state.paths}
-            onSelect={(p, add) => {
-              const cur = edit.state.paths;
-              void edit.select(add ? (cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p]) : [p]);
+        {leftOpen && (
+          <LeftPanel
+            ref={searchRef}
+            board={board}
+            pages={pages}
+            currentPage={currentPage}
+            selected={selected}
+            missing={data.missing}
+            onPage={setPage}
+            onAddPage={() => void addPage()}
+            onPageMenu={pageMenu}
+            onPick={(f, add) => {
+              const b = board.boards[f];
+              if (pages.length && b && (b.page ?? pages[0].id) !== currentPage) setPage(b.page ?? pages[0].id);
+              select([f], add ? "toggle" : "replace");
+              if (!add) goTo([f]);
             }}
-            onMove={async (path, toParentPath, index) => {
-              const { hash } = await api.get<{ hash: string }>(`/api/element?f=${encodeURIComponent(editFile)}&path=${encodeURIComponent(path)}`);
-              if (await doEdit({ op: "move", path, hash, toParentPath, index })) {
-                void edit.select([toParentPath ? `${toParentPath}/${index}` : String(index)]);
-              }
+            onBoardMenu={(f, at) => {
+              if (!selected.includes(f)) select([f]);
+              setMenu({ x: at.clientX, y: at.clientY, title: board.boards[f]?.title ?? f, items: boardMenuItems(f) });
             }}
           />
         )}
-      </Inspector>
+        <div className="canvas-wrap">
+          <Canvas
+            board={board}
+            files={data.files}
+            view={view}
+            setView={setView}
+            tool={tool}
+            setTool={setTool}
+            visibleBoards={visibleBoards}
+            visibleNotes={visibleNotes}
+            selected={selected}
+            selectedNote={selectedNote}
+            editFile={editFile}
+            reloadKeys={reloadKeys}
+            onSelect={select}
+            onSelectNote={(id) => {
+              setSelectedNote(id);
+              if (id) setSelected([]);
+            }}
+            onMoveBoards={(patches, done) =>
+              update(
+                (b) => ({ ...b, boards: { ...b.boards, ...Object.fromEntries(Object.entries(patches).map(([f, p]) => [f, { ...b.boards[f], ...p, autoPlaced: undefined }])) } }),
+                done ? (Object.values(patches).some((p) => p.w != null) ? "보드 크기" : "보드 옮기기") : undefined,
+              )
+            }
+            onMoveNote={(id, patch, done) => update((b) => ({ ...b, notes: { ...b.notes, [id]: { ...b.notes[id], ...patch } } }), done ? ("text" in patch ? "메모 고치기" : "메모 옮기기") : undefined)}
+            onDeleteNote={deleteNote}
+            onPlay={setPlayFile}
+            onEdit={(f) => {
+              setEditFile(f);
+              if (f) setSelected([f]);
+            }}
+            onRename={(f) => void renameBoard(f)}
+            onCreateBoard={(r) => void createBoard(r)}
+            onCreateNote={createNote}
+            onContext={onContext}
+            onSize={setCanvasSize}
+            renderBoardOverlay={renderOverlay}
+            iframeRef={(f, el) => {
+              // ref 콜백은 렌더마다 null → el로 다시 불린다. 정말 새 iframe일 때만 갱신한다
+              if (el && frames.current.get(f) !== el) {
+                frames.current.set(f, el);
+                setFrameTick((t) => t + 1);
+              }
+            }}
+          />
+          {visibleBoards.length === 0 && visibleNotes.length === 0 && (
+            <div className="canvas-empty">
+              <Icon name="board" size={32} />
+              <p>이 페이지는 비어 있어요</p>
+              <button className="primary" onClick={() => setTool("board")}>
+                보드 그리기 <kbd>B</kbd>
+              </button>
+            </div>
+          )}
+          {minimapOpen && rects.length > 0 && (
+            <Minimap rects={rects} selected={selected} view={view} size={size} onJump={(x, y) => setView((v) => ({ ...v, x: size.w / 2 - x * v.zoom, y: size.h / 2 - y * v.zoom }))} />
+          )}
+        </div>
+        <Inspector
+          file={editFile ?? one}
+          editing={!!editFile}
+          selection={edit.state.selection}
+          multi={edit.state.paths.length}
+          error={edit.state.error}
+          comments={comments}
+          onSelectPath={(p) => editFile && void edit.select([p])}
+        >
+          {!editFile && one && board.boards[one] && (
+            <BoardOptions
+              file={one}
+              item={board.boards[one]}
+              pages={pages}
+              isLaunch={board.launch?.view === "focused" && board.launch.file === one}
+              onPatch={(patch) => patchBoard(one, patch)}
+              onRename={() => void renameBoard(one)}
+              onRenameFile={() => void renameFile(one)}
+              onFocus={() => setFocusFile(one)}
+              onFront={() => reorder([one], "front")}
+              onBack={() => reorder([one], "back")}
+              onDuplicate={() => void duplicateBoard(one)}
+              onDelete={() => void deleteBoards([one])}
+              onLaunch={(on) => update((b) => ({ ...b, launch: on ? { view: "focused", file: one } : { view: "canvas" } }), "시작 화면 설정")}
+            />
+          )}
+          {!editFile && selected.length > 1 && (
+            <section className="board-opts">
+              <div className="sec-head">
+                <span>보드 {selected.length}개 선택</span>
+              </div>
+              <div className="btn-row">
+                <button className="icon-btn" aria-label="맨 앞으로" title={`맨 앞으로 (${mod}])`} onClick={() => reorder(selected, "front")}><Icon name="front" /></button>
+                <button className="icon-btn" aria-label="맨 뒤로" title={`맨 뒤로 (${mod}[)`} onClick={() => reorder(selected, "back")}><Icon name="back" /></button>
+                <button className="icon-btn" aria-label="선택한 보드로 이동" title="선택한 보드로 이동 (⇧2)" onClick={() => goTo(selected)}><Icon name="fit" /></button>
+                <button className="icon-btn danger" aria-label="삭제" title="삭제 (⌫)" onClick={() => void deleteBoards(selected)}><Icon name="trash" /></button>
+              </div>
+            </section>
+          )}
+          {editFile && edit.state.selection && edit.state.selection.file === editFile && (() => {
+            const sel = edit.state.selection;
+            const el = frames.current.get(editFile)?.contentDocument ? elementAt(frames.current.get(editFile)!.contentDocument!, sel.path) : null;
+            const attrs: Record<string, string> = {};
+            if (el) for (const a of Array.from(el.attributes)) attrs[a.name] = a.value;
+            const paths = edit.state.paths;
+            return (
+              <Properties
+                selection={sel}
+                inline={el ? inlineStyles(el) : {}}
+                attrs={attrs}
+                canWrap={paths.length >= 2}
+                onStyle={(prop, value) => void doEdit({ op: "setStyle", path: sel.path, hash: sel.hash, prop, value })}
+                onAttr={(name, value) => void doEdit({ op: "setAttr", path: sel.path, hash: sel.hash, name, value })}
+                onDuplicate={() => void doEdit({ op: "duplicate", path: sel.path, hash: sel.hash })}
+                onDelete={async () => {
+                  if (await doEdit({ op: "delete", path: sel.path, hash: sel.hash })) void edit.select([]);
+                }}
+                onWrap={async (display) => {
+                  const ordered = [...paths].sort((a, b) => Number(a.split("/").pop()) - Number(b.split("/").pop()));
+                  const hashes = await Promise.all(ordered.map((p) => api.get<{ hash: string }>(`/api/element?f=${encodeURIComponent(editFile)}&path=${encodeURIComponent(p)}`).then((r) => r.hash)));
+                  if (await doEdit({ op: "wrap", paths: ordered, hashes, display })) void edit.select([ordered[0]]);
+                }}
+              />
+            );
+          })()}
+          {editFile && (
+            <Layers
+              file={editFile}
+              version={reloadKeys[editFile] ?? 0}
+              selected={edit.state.paths}
+              onSelect={(p, add) => {
+                const cur = edit.state.paths;
+                void edit.select(add ? (cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p]) : [p]);
+              }}
+              onMove={async (path, toParentPath, index) => {
+                const { hash } = await api.get<{ hash: string }>(`/api/element?f=${encodeURIComponent(editFile)}&path=${encodeURIComponent(path)}`);
+                if (await doEdit({ op: "move", path, hash, toParentPath, index })) {
+                  void edit.select([toParentPath ? `${toParentPath}/${index}` : String(index)]);
+                }
+              }}
+            />
+          )}
+        </Inspector>
       </div>
       {playFile && (
         <Play
@@ -410,12 +839,24 @@ export function App() {
           file={playFile}
           onClose={() => setPlayFile(null)}
           onLocate={(f) => {
-            setSelectedBoard(f);
-            const b = board.boards[f];
-            if (b) setView(fitView([b], canvasSize ?? { w: window.innerWidth, h: window.innerHeight - 48 }, 80));
+            setSelected([f]);
+            goTo([f]);
           }}
         />
       )}
+      {focusFile && board.boards[focusFile] && (
+        <FocusView
+          board={board}
+          file={focusFile}
+          onClose={() => {
+            setSelected([focusFile]);
+            setFocusFile(null);
+          }}
+          onNav={setFocusFile}
+        />
+      )}
+      <ContextMenu menu={menu} onClose={() => setMenu(null)} />
+      <Dialog state={ask.state} onClose={ask.close} />
     </div>
   );
 }
