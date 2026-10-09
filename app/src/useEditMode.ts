@@ -132,7 +132,8 @@ export function useEditMode(editFile: string | null, getFrame: (f: string) => HT
     };
     const onLoad = () => {
       attach();
-      refresh();
+      // 파일이 바뀌어 다시 불러왔으면 같은 경로를 다시 선택해 새 해시를 받는다
+      if (pathsRef.current.length) void select(pathsRef.current);
     };
     if (frame.contentDocument?.readyState === "complete") attach();
     frame.addEventListener("load", onLoad);

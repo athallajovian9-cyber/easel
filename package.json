@@ -12,7 +12,7 @@
     "start": "node bin/server.mjs",
     "mcp": "node bin/mcp.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node --test test/"
+    "test": "node --test test/*.test.mjs"
   },
   "engines": {
     "node": ">=20"

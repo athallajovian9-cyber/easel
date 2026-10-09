@@ -4,9 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { api, clientId, connectEvents, type ServerEvent } from "./api";
 import { Canvas, fitView, isTyping } from "./Canvas";
-import { elementAt, rectOf } from "./editor";
+import { elementAt, inlineStyles, rectOf } from "./editor";
 import { Inspector, type Comment } from "./Inspector";
 import { Play } from "./Play";
+import { Properties } from "./Properties";
 import { useEditMode } from "./useEditMode";
 import type { Board, BoardItem, BoardResponse, Note, View } from "./types";
 
@@ -29,7 +30,64 @@ export function App() {
   const [frameTick, setFrameTick] = useState(0);
   const [comments, setComments] = useState<Comment[]>([]);
   const getFrame = useCallback((f: string) => frames.current.get(f) ?? null, [frameTick]);
-  const edit = useEditMode(editFile, getFrame);
+  const editRef = useRef<ReturnType<typeof useEditMode> | null>(null);
+  /** 원본 패치 요청(해시가 다르면 서버가 거부) */
+  const doEdit = useCallback(
+    async (payload: Record<string, unknown>) => {
+      if (!editFile) return false;
+      try {
+        await api.post("/api/edit", { file: editFile, ...payload });
+        return true;
+      } catch (e) {
+        editRef.current?.setError(String((e as Error).message));
+        return false;
+      }
+    },
+    [editFile],
+  );
+  /** 더블클릭: 글자 하나만 있는 요소를 그 자리에서 고친다. Enter·포커스 이탈에 setText */
+  const onTextEdit = useCallback(
+    (el: HTMLElement, path: string) => {
+      if (el.children.length) {
+        editRef.current?.setError("글자 하나만 있는 요소만 바로 고칠 수 있어요");
+        return;
+      }
+      const before = el.textContent ?? "";
+      el.contentEditable = "true";
+      el.focus();
+      const doc = el.ownerDocument;
+      const r = doc.createRange();
+      r.selectNodeContents(el);
+      doc.getSelection()?.removeAllRanges();
+      doc.getSelection()?.addRange(r);
+      let cancelled = false;
+      const finish = async () => {
+        el.removeEventListener("keydown", onKey);
+        el.contentEditable = "false";
+        const text = el.textContent ?? "";
+        if (cancelled || text === before) {
+          el.textContent = before;
+          return;
+        }
+        const { hash } = await api.get<{ hash: string }>(`/api/element?f=${encodeURIComponent(editFile!)}&path=${encodeURIComponent(path)}`);
+        if (!(await doEdit({ op: "setText", path, hash, text }))) el.textContent = before;
+      };
+      const onKey = (e: KeyboardEvent) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          el.blur();
+        } else if (e.key === "Escape") {
+          cancelled = true;
+          el.blur();
+        }
+      };
+      el.addEventListener("keydown", onKey);
+      el.addEventListener("blur", () => void finish(), { once: true });
+    },
+    [editFile, doEdit],
+  );
+  const edit = useEditMode(editFile, getFrame, { onTextEdit });
+  editRef.current = edit;
   const loadComments = useCallback(() => api.get<{ comments: Comment[] }>("/api/comments").then((r) => setComments(r.comments)).catch(() => {}), []);
   const saveTimer = useRef<number | null>(null);
   const boardRef = useRef<Board | null>(null);
@@ -153,10 +211,15 @@ export function App() {
     update((b) => ({ ...b, boards: { ...b.boards, [selectedBoard]: { ...b.boards[selectedBoard], page: id } } }), true);
   };
 
-  // 단축키: Delete로 메모 삭제, Esc로 편집 모드 끄기
+  // 단축키: ⌘Z/⌘⇧Z 실행 취소·다시(서버 기록), Delete로 메모 삭제
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (isTyping(e)) return;
+      if (editFile && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        api.post(e.shiftKey ? "/api/redo" : "/api/undo", { file: editFile }).catch((err) => edit.setError(String(err.message)));
+        return;
+      }
       if ((e.key === "Delete" || e.key === "Backspace") && selectedNote) {
         update((b) => {
           const { [selectedNote]: _, ...rest } = b.notes;
@@ -167,7 +230,7 @@ export function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selectedNote, update]);
+  }, [selectedNote, update, editFile, edit]);
 
   /** 보드 위 오버레이: 편집 중이면 외곽선·선택, 댓글 핀 */
   const renderOverlay = (f: string) => {
@@ -292,7 +355,34 @@ export function App() {
         error={edit.state.error}
         comments={comments}
         onSelectPath={(p) => editFile && void edit.select([p])}
-      />
+      >
+        {editFile && edit.state.selection && edit.state.selection.file === editFile && (() => {
+          const sel = edit.state.selection;
+          const el = frames.current.get(editFile)?.contentDocument ? elementAt(frames.current.get(editFile)!.contentDocument!, sel.path) : null;
+          const attrs: Record<string, string> = {};
+          if (el) for (const a of Array.from(el.attributes)) attrs[a.name] = a.value;
+          const paths = edit.state.paths;
+          return (
+            <Properties
+              selection={sel}
+              inline={el ? inlineStyles(el) : {}}
+              attrs={attrs}
+              canWrap={paths.length >= 2}
+              onStyle={(prop, value) => void doEdit({ op: "setStyle", path: sel.path, hash: sel.hash, prop, value })}
+              onAttr={(name, value) => void doEdit({ op: "setAttr", path: sel.path, hash: sel.hash, name, value })}
+              onDuplicate={() => void doEdit({ op: "duplicate", path: sel.path, hash: sel.hash })}
+              onDelete={async () => {
+                if (await doEdit({ op: "delete", path: sel.path, hash: sel.hash })) void edit.select([]);
+              }}
+              onWrap={async (display) => {
+                const ordered = [...paths].sort((a, b) => Number(a.split("/").pop()) - Number(b.split("/").pop()));
+                const hashes = await Promise.all(ordered.map((p) => api.get<{ hash: string }>(`/api/element?f=${encodeURIComponent(editFile)}&path=${encodeURIComponent(p)}`).then((r) => r.hash)));
+                if (await doEdit({ op: "wrap", paths: ordered, hashes, display })) void edit.select([ordered[0]]);
+              }}
+            />
+          );
+        })()}
+      </Inspector>
       </div>
       {playFile && (
         <Play
