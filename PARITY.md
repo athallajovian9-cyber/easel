@@ -17,9 +17,9 @@
 
 | 판정 | 개수 |
 | --- | --- |
-| PASS | 34 |
-| PARTIAL | 22 |
-| MISSING | 15 |
+| PASS | 42 |
+| PARTIAL | 19 |
+| MISSING | 10 |
 | N/A | 3 |
 | 합계 | 74 |
 
@@ -57,13 +57,13 @@
 | 16 | B 메모 | 이동·크기·삭제, 최대 200개 | 됨 | 이동·삭제(× 또는 Delete)·글 편집은 됨. 메모 id 겹침 고침(시간+무작위, 겹치면 다시). 크기 조절·개수 제한 없음 | PARTIAL | B16.delete_selected_note=true · 코드: addNote id | S |
 | 17 | C 편집 | hover·클릭·Shift·Esc·보드 전체 선택 | 됨 | hover 외곽선, 클릭, Shift 다중, Esc 상위 됨. 보드 전체 선택 없음 | PARTIAL | `C17.hover_box`=1, `selected_path`=0/1/1/5, `shift_multi`=2, `esc_parent`=0/1/1 · `C17-select.png` | S |
 | 18 | C 편집 | 그 자리에서 글자 고치기(여러 줄) | 됨 | 글자 하나만 있는 요소는 됨(원본 그 글자만 바뀜). Shift+Enter 줄바꿈은 textContent로 저장돼 사라짐. 자식이 있으면 거부 | PARTIAL | `C18.settext_diff`(1줄) · 코드: `onTextEdit`의 `textContent` | M |
-| 19 | C 편집 | 요소 끌어 옮기기·크기·정렬 | 캔버스에서 바로 | 없음(레이어 목록 끌기만) | MISSING | 코드 | L |
-| 20 | C 편집 | 속성 패널 항목 | 크기·여백·글꼴·줄 간격·색·배경·테두리·모서리·그림자·투명도·flex 전부 | 14개(너비·높이·padding·margin·gap·글자 크기·굵기·색·배경·모서리·display·flex 방향·세로·가로 정렬) + href 등. 줄 간격·테두리·그림자·투명도·flex-wrap·flex-grow·align-self 없음 | PARTIAL | `C20.props_fields` · `C20-props.png` | S |
-| 21 | C 편집 | grid 열·행 수 숫자 왕복 | `repeat(N, minmax(0,1fr))`를 숫자로 읽고 같은 형식으로 쓴다 | 없음 | MISSING | 코드 | M |
+| 19 | C 편집 | 요소 끌어 옮기기·크기·정렬 | 캔버스에서 바로 | 편집 중 고른 요소에 손잡이: 위쪽 손잡이로 끌면 놓을 자리 선(가리킨 요소 앞·뒤, 상자를 가리키면 그 안 위치, Alt면 가리킨 상자 안)→ move. 절대 위치 요소는 left/top. 오른쪽·아래·모서리 손잡이로 너비·높이(px). 속성 패널 정렬 6개(부모 배치에 맞춰 align-self/margin auto) | PASS | ux 스크립트: flex 행 안 순서 바꾸기 → 원본 반영·새 경로 선택·⌘Z 복원, 크기 → style="width:412px;height:69px", 가로 가운데 → align-self:center; .out/ux/p3-19-*.png — 손잡이 hit 영역 24×20·10px, accent 표시선 | L |
+| 20 | C 편집 | 속성 패널 항목 | 크기·여백·글꼴·줄 간격·색·배경·테두리·모서리·그림자·투명도·flex 전부 | 기존 14개 + 줄바꿈(flex-wrap)·늘이기(flex-grow)·자기 정렬(align-self)·줄 간격·글자 정렬·테두리·그림자·투명도. 한글 조합 중 Enter 무시 | PASS | ux 스크립트: line-height·opacity·border·box-shadow 모두 원본에 기록; .out/ux/p3-21-props.png | S |
+| 21 | C 편집 | grid 열·행 수 숫자 왕복 | `repeat(N, minmax(0,1fr))`를 숫자로 읽고 같은 형식으로 쓴다 | display가 grid면 '열 수'·'행 수': repeat(N, …)이나 트랙 개수를 숫자로 읽고 repeat(N, minmax(0, 1fr))로 씀(1~24) | PASS | ux 스크립트: 3 입력 → grid-template-columns: repeat(3, minmax(0, 1fr)), 다시 읽기 3; .out/ux/p3-21-grid.png | M |
 | 22 | C 편집 | Flex·Grid로 감싸기 | 됨 | 같은 부모의 연속 형제를 `<div style="display:flex;gap:8px">`(grid)로 감싸고 들여쓰기 맞춤 | PASS | 단위 테스트 `wrap` 2개, 수동 시험(scr-32) | S |
-| 23 | C 편집 | flex·grid 밖으로 끌어낼 때 형제·부모 크기 고정 | 다른 요소가 안 움직임 | 없음(끌어내기 자체가 없음) | MISSING | 코드 | L |
+| 23 | C 편집 | flex·grid 밖으로 끌어낼 때 형제·부모 크기 고정 | 다른 요소가 안 움직임 | flex·grid 부모 밖으로 옮기면 원래 부모(너비·높이)와 남는 형제(행은 너비, 열은 높이, grid는 둘 다)의 지금 크기를 inline으로 고정. 이미 있는 크기는 그대로. 옮기기와 같은 한 단계(⌘Z 한 번) | PASS | 단위 `edit-p3.test.mjs` move+freeze; ux 스크립트: header에 width:390px 추가, ⌘Z 한 번에 원래대로; .out/ux/p3-23-freeze.png | L |
 | 24 | C 편집 | 복제·삭제·레이어 목록·순서 변경 | 됨 | 복제·삭제(속성 패널), 레이어 트리, 끌어 놓아 순서 변경 됨 | PASS | `C24.duplicate_diff`(1줄 추가), `C24.layers_rows`, 수동 레이어 끌기(M6) | S |
-| 25 | C 편집 | 이미지 교체(업로드하면 경로 바뀜) | 업로드 | `img`의 src를 글자로 바꿀 수만 있음. 업로드 없음 | PARTIAL | 코드: `Properties` ATTRS.img | M |
+| 25 | C 편집 | 이미지 교체(업로드하면 경로 바뀜) | 업로드 | img(또는 background-image가 있는 요소) '이미지 바꾸기…' → 자산 고르기 창(올리기 포함) → src를 ../assets/이름으로(배경은 url()) | PASS | ux 스크립트: scr-02 첫 img → src="../assets/test-logo.png"; .out/ux/p3-22-picker.png | M |
 | 26 | C 편집 | 실행 취소·다시, 사람·AI 동시 수정 충돌 | 됨 | 파일별 서버 기록 50개로 ⌘Z/⌘⇧Z. 옛 해시로 편집하면 409, 밖에서 바뀌면 실행 취소 기록을 비움 | PASS | `C26.undo_redo`(배경 선언만 빠졌다 돌아옴), 수동 재현: 밖에서 글자 수정 → 옛 해시 setStyle 409 "파일이 바뀜, 다시 선택" | S |
 | 27 | C 편집 | 원본 그 부분만 바뀜 | 됨 | parse5 위치로 그 구간만 교체 | PASS | `C27.style_diff`(1줄, `style="gap:12px;background:#111111"`), 단위 테스트 12개 | S |
 | 28 | D 프로토 | Play(그 자리, 전체 화면) | 둘 다 | 전체 화면 오버레이만. 보드 그 자리에서 실행 없음 | PARTIAL | `D28.play_nav`="SCR-04 상품 상세" · `D28-play.png` | S |
@@ -84,7 +84,7 @@
 | 43 | G 협업 | 댓글 고정·목록·답글·해결·작성자 | 됨 | 요소·보드 고정 핀, 목록, 해결·다시 열기, 작성자. 답글 없음. 축소 상태 보드는 핀이 오른쪽 위에 쌓임 | PARTIAL | M4 댓글 API 시험 · 코드: `renderOverlay` | S |
 | 44 | G 협업 | 버전 저장·분기 | 기본 기록 없음, Claude에게 저장 요청 | git 커밋·브랜치로 대체 | N/A | 공식 도움말: 버전 기록 아직 없음 | – |
 | 45 | G 협업 | 공유·권한·실시간 공동 편집 | 보기·댓글·편집 권한 공유 | git push·PR로 공유하고 각자 로컬에서 실행 | N/A | – | – |
-| 46 | H 단축키 | ⌘Z ⌘⇧Z Delete ⌘D 화살표 ⌘A ⌘G 스페이스 ⌘0 ⌘1 ⌘C ⌘V | 됨 | ⌘Z ⌘⇧Z(⌘Y) Delete ⌘D 화살표(Shift 10) ⌘A ⌘0 ⌘1 ⌘± ⇧1 ⇧2 ⌘K ⌘J ⌘\\ F2 F E M V H B T N Esc 스페이스. ⌘G ⌘C ⌘V F6 없음 | PARTIAL | App.tsx 단축키 표; 메뉴·툴팁에 표시 | M |
+| 46 | H 단축키 | ⌘Z ⌘⇧Z Delete ⌘D 화살표 ⌘A ⌘G 스페이스 ⌘0 ⌘1 ⌘C ⌘V | 됨 | ⌘Z ⌘⇧Z(⌘Y) Delete ⌘D(보드·요소) ⌘C·⌘V(편집 중 요소) 화살표(Shift 10) ⌘A ⌘0 ⌘1 ⌘± ⇧1 ⇧2 ⌘K ⌘J ⌘\\ F2 F E M V H B T N Esc 스페이스. ⌘G F6 없음 | PARTIAL | App.tsx 단축키 표; 메뉴·툴팁에 표시 | M |
 | 47 | H 사용성 | 다크 모드·창 크기·휠 조작감 | 됨 | 토큰을 :root에 두고 prefers-color-scheme 다크·data-theme 둘 다 정의. 직접 바꾸는 단추는 P4 | PARTIAL | .out/ux/p1-dark.png | S |
 | 48 | I 렌더링 | 98장 픽셀 동일성 | – | 98장 모두 1% 미만(최대 s-03-unfollowed 0.127%, 평균 0.059%) | PASS | `pixel/pixel.json` | – |
 | 49 | J 추가 | 캔버스 안 채팅 패널(claude -p·codex exec, 스트리밍, 취소, 에이전트 선택) | 채팅이 기본 | 오른쪽 'AI'(⌘J) 탭: Claude Code·Codex 고르기(설치 확인), 선택 요소·고른 보드·보이는 보드 칩(눌러서 빼기), Enter 보내기(한글 조합 중 무시), 글 조각 스트리밍·도구 줄·비용, 취소(Esc·단추, 프로세스 묶음 종료), 이어서 대화(--resume / exec resume), 새 대화 | PASS | e2e `chat.e2e.mjs`(가짜 에이전트: 스트리밍·원본 반영·맥락·취소); 실제: Claude Code 48s·Codex 38s로 scr-02 title만 바뀜; 단위 `chat.test.mjs`; .out/ux/p2-49-*.png | L |
@@ -92,13 +92,13 @@
 | 51 | J 추가 | 참고 자료 첨부(이미지·문서·URL) | 업로드·링크 | 링크 추가, 파일·이미지 첨부(단추·끌어 놓기·붙여넣기) → docs/design/.refs/(gitignore)에 저장, 맥락에 경로. Codex는 이미지를 -i로도 넘김 | PASS | ux 스크립트: 프롬프트에 참고 링크·참고 파일(이미지) .refs/…-ref.png; .out/ux/p2-50-51-attach.png | M |
 | 52 | J 추가 | "N가지 안" 나란히 | 변형 2~3개 제안 | 채팅 '안 N개'(2~4): 원본을 -v1…-vN으로 복사해 원본 아래 빈 줄에 나란히 두고, 에이전트에게 각각 다른 방향으로 고치라고 지시. 끝나면 그 자리로 이동 | PASS | 실제: Claude Code 48s·Codex 59s 모두 v1에 '당도순', v2에 '지도', 원본 그대로; .out/ux/p2-52-variants.png | S |
 | 53 | J 추가 | 템플릿·빈 보드에서 시작 | 템플릿 | 도구 막대 '새 보드' 메뉴: 빈 보드·모바일 화면·PC 화면·문서 틀(토큰 색·Pretendard), 우클릭 '여기에 모바일 화면 틀', MCP create_board(template) | PASS | ux 스크립트: 모바일 화면 → mobile.html 생성; .out/ux/p2-53-*.png | S |
-| 54 | J 추가 | 자산 보관함(이미지·폰트 업로드, 재사용) | 업로드 자산 | 없음(`docs/design/assets/` 정적 서빙만) | MISSING | 코드 | M |
+| 54 | J 추가 | 자산 보관함(이미지·폰트 업로드, 재사용) | 업로드 자산 | 왼쪽 '자산' 탭: docs/design/assets/ 이미지·폰트 썸네일, 올리기(단추·끌어 놓기, 이름 겹치면 -2), 누르면 경로 복사. 이미지 바꾸기 창과 같은 목록 | PASS | ux 스크립트: 'Test Logo.png' → assets/test-logo.png; .out/ux/p3-22-assets.png | M |
 | 55 | J 추가 | 접근성 검사(누르는 영역·명암비·label) | Claude에게 리뷰 요청 | 없음 | MISSING | 코드 | M |
-| 56 | J 추가 | 한글 IME | 조합 중 Enter·blur에 깨지지 않음 | 글자 편집 Enter 처리에 `isComposing` 확인이 없어 조합 중 Enter에 확정·저장될 수 있음. 실제 IME는 자동화로 시험 못 함 | PARTIAL | 코드: `onTextEdit` onKey | S |
+| 56 | J 추가 | 한글 IME | 조합 중 Enter·blur에 깨지지 않음 | 글자 바로 고치기·메모·속성 칸·검색·채팅·입력 창: 조합 중 Enter 무시, 조합 중 포커스가 빠지면 compositionend 뒤 저장, iframe에서 조합 중 키는 단축키(⌘Z 등)로 넘기지 않음 | PASS | ux 스크립트(합성 composition 이벤트): 조합 중 Enter·blur → 저장 안 됨, compositionend 뒤 '농가들' 저장. 실제 IME 입력기는 자동화 불가 | S |
 | 57 | J 추가 | 캔버스 조작 실행 취소 | 됨 | 서버 한 기록(history.mjs)에 HTML 편집·보드 이동/크기/옵션/순서·메모·페이지·보드 만들기/삭제/복제/이름이 시간순으로 쌓임. ⌘Z/⌘⇧Z·도구 막대·우클릭·토스트에서 실행 취소, 밖에서 바뀌면 409로 기록 비움 | PASS | e2e `boards.e2e.mjs` 'HTML 편집 → 보드 옮기기 → ⌘Z 두 번이 역순'; 단위 17개 통과; .out/ux/p1-57-undo-toast.png | M |
 | 58 | J 추가 | board.json 충돌 최소화 | – | 보드·메모 키를 정렬하고 항목 하나를 한 줄로, 항목 사이 빈 줄 하나. 서버가 저장할 때 항상 이 형식. 기존 board.json은 값은 그대로 형식만 다시 씀(865→324줄) | PASS | 단위 테스트 boardFormat: 값 동일·한 줄·정렬·다시 써도 같음, git merge-file 병합 3가지(이웃 보드 각각 이동·메모 각각 추가·이동+메모) 충돌 0 | S |
 | 59 | J 추가 | HTML 이름 바꾸기·삭제 따라가기 | – | 이름을 바꾸면 새 보드가 자동 배치되고 옛 보드는 '파일 없음'과 '파일 없는 보드 1'로 표시. 따라가거나 정리하는 동작 없음 | PARTIAL | `J59.rename_result`, `J59.missing_badge` | S |
-| 60 | J 추가 | 요소를 다른 보드로 복사·붙여넣기 | 됨 | 없음 | MISSING | 코드 | M |
+| 60 | J 추가 | 요소를 다른 보드로 복사·붙여넣기 | 됨 | 편집 중 ⌘C로 요소 소스를 앱 클립보드(localStorage, 다른 보드·탭에서도)와 시스템 클립보드에 → 다른 보드 편집 중 ⌘V로 고른 요소 뒤(없으면 본문 끝)에 들여쓰기 맞춰 붙임. 우클릭에도 있음. script는 막음 | PASS | 단위 insert 3개; ux 스크립트: scr-32 '문의 보내기' → scr-02에 붙음; .out/ux/p3-60-paste.png | M |
 | 61 | J 추가 | 보드 검색·이동 | – | 왼쪽 패널 '보드 찾기(⌘K)': 제목·파일 이름으로 거르고 Enter로 첫 보드로 이동·선택, Esc로 비움 | PASS | ux 스크립트: '결제' 3개, Enter → scr-11 선택; .out/ux/p1-61-search.png | S |
 | 62 | J 추가 | Windows 경로·감시 | – | 코드상 `path.sep`으로 나누고 URL은 `/`로 맞춤, chokidar 사용. 실제 Windows 미시험 | PARTIAL | 코드: `watch.mjs`, `safeJoin` | S |
 | 63 | J 추가 | 보안(127.0.0.1, 경로 탈출) | – | 127.0.0.1에만 열림, `/screens/..%2F` 404, `/api/file?f=../` 400 | PASS | `J63.*` | S |

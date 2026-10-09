@@ -32,6 +32,7 @@ export type ServerEvent =
   | { type: "comments-changed" }
   | { type: "history-changed" }
   | { type: "errors-changed" }
+  | { type: "assets-changed" }
   | { type: "chat"; id: string; ev: import("./chat").ChatEvent };
 
 /** 끊기면 1초 뒤 다시 붙는 WS */

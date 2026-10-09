@@ -48,6 +48,18 @@ export const STYLE_PROPS = [
   "flex-direction",
   "align-items",
   "justify-content",
+  "line-height",
+  "text-align",
+  "border",
+  "box-shadow",
+  "opacity",
+  "flex-wrap",
+  "flex-grow",
+  "align-self",
+  "grid-template-columns",
+  "grid-template-rows",
+  "position",
+  "background-image",
 ] as const;
 
 export function computedStyles(el: Element): Record<string, string> {

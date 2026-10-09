@@ -30,7 +30,46 @@ const FIELDS: { prop: string; label: string; options?: string[]; color?: boolean
   { prop: "flex-direction", label: "flex 방향", options: ["", "row", "column"] },
   { prop: "align-items", label: "세로 정렬", options: ["", "flex-start", "center", "flex-end", "stretch", "baseline"] },
   { prop: "justify-content", label: "가로 정렬", options: ["", "flex-start", "center", "flex-end", "space-between"] },
+  { prop: "flex-wrap", label: "줄바꿈", options: ["", "nowrap", "wrap"] },
+  { prop: "flex-grow", label: "늘이기", options: ["", "0", "1"] },
+  { prop: "align-self", label: "자기 정렬", options: ["", "auto", "flex-start", "center", "flex-end", "stretch"] },
+  { prop: "line-height", label: "줄 간격" },
+  { prop: "text-align", label: "글자 정렬", options: ["", "left", "center", "right"] },
+  { prop: "border", label: "테두리" },
+  { prop: "box-shadow", label: "그림자" },
+  { prop: "opacity", label: "투명도" },
 ];
+
+/** grid-template-columns/rows → 칸 수. repeat(N, …)이면 N, 아니면 트랙 개수 */
+export function gridCount(v: string | undefined): number | null {
+  if (!v || v === "none") return null;
+  const m = v.match(/^\s*repeat\(\s*(\d+)\s*,/);
+  if (m) return Number(m[1]);
+  let depth = 0;
+  let n = 0;
+  let inTok = false;
+  for (const ch of v) {
+    if (ch === "(") depth++;
+    if (ch === ")") depth--;
+    if (/\s/.test(ch) && depth === 0) inTok = false;
+    else if (!inTok) {
+      inTok = true;
+      n++;
+    }
+  }
+  return n || null;
+}
+export const gridValue = (n: number) => `repeat(${n}, minmax(0, 1fr))`;
+
+const ALIGN = [
+  { dir: "left", label: "왼쪽 맞춤", glyph: "⇤" },
+  { dir: "hcenter", label: "가로 가운데", glyph: "↔" },
+  { dir: "right", label: "오른쪽 맞춤", glyph: "⇥" },
+  { dir: "top", label: "위 맞춤", glyph: "⤒" },
+  { dir: "vcenter", label: "세로 가운데", glyph: "↕" },
+  { dir: "bottom", label: "아래 맞춤", glyph: "⤓" },
+] as const;
+export type AlignDir = (typeof ALIGN)[number]["dir"];
 
 const ATTRS: Record<string, string[]> = { a: ["href"], img: ["src", "alt"], input: ["placeholder"], button: ["aria-label"] };
 
@@ -44,6 +83,8 @@ export function Properties(props: {
   onDuplicate: () => void;
   onDelete: () => void;
   canWrap: boolean;
+  onAlign: (dir: AlignDir) => void;
+  onReplaceImage: (() => void) | null;
 }) {
   const s = props.selection;
   const attrNames = ATTRS[s.tag] ?? [];
@@ -61,9 +102,31 @@ export function Properties(props: {
           onCommit={(v) => props.onStyle(f.prop, v)}
         />
       ))}
+      {(props.inline.display ?? s.styles.display ?? "").includes("grid") &&
+        (["grid-template-columns", "grid-template-rows"] as const).map((prop) => (
+          <Field
+            key={prop + s.path + s.hash}
+            label={prop.endsWith("columns") ? "열 수" : "행 수"}
+            value={String(gridCount(props.inline[prop]) ?? "")}
+            placeholder={String(gridCount(s.styles[prop]) ?? "")}
+            onCommit={(v) => props.onStyle(prop, /^\d+$/.test(v) && Number(v) > 0 ? gridValue(Math.min(24, Number(v))) : v)}
+          />
+        ))}
       {attrNames.map((n) => (
         <Field key={n + s.path + s.hash} label={n} value={props.attrs[n] ?? ""} placeholder="" onCommit={(v) => props.onAttr(n, v === "" ? null : v)} />
       ))}
+      <div className="align-row" role="group" aria-label="정렬">
+        {ALIGN.map((a) => (
+          <button key={a.dir} className="icon-btn sm" aria-label={a.label} title={a.label} onClick={() => props.onAlign(a.dir)}>
+            <span className="glyph">{a.glyph}</span>
+          </button>
+        ))}
+      </div>
+      {props.onReplaceImage && (
+        <button onClick={props.onReplaceImage}>
+          이미지 바꾸기…
+        </button>
+      )}
       <div className="row">
         <button onClick={() => props.onWrap("flex")} disabled={!props.canWrap} title="같은 부모의 연속된 형제를 고른 뒤">
           flex로 감싸기
@@ -110,6 +173,7 @@ function Field(p: { label: string; value: string; placeholder: string; options?:
           onChange={(e) => setV(e.target.value)}
           onBlur={() => commit()}
           onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing) return;
             if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
             if (e.key === "Escape") {
               setV(p.value);

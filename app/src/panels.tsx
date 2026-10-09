@@ -18,6 +18,7 @@ export const LeftPanel = forwardRef<HTMLInputElement, {
   onPageMenu: (id: string, e: { clientX: number; clientY: number }) => void;
   onPick: (file: string, add: boolean) => void;
   onBoardMenu: (file: string, e: { clientX: number; clientY: number }) => void;
+  header?: React.ReactNode;
 }>(function LeftPanel(p, searchRef) {
   const [q, setQ] = useState("");
   const firstPage = p.pages[0]?.id;
@@ -32,6 +33,7 @@ export const LeftPanel = forwardRef<HTMLInputElement, {
   }, [q, p.board, p.pages, p.currentPage, firstPage]);
   return (
     <aside className="left" aria-label="페이지와 보드">
+      {p.header}
       <section className="left-pages">
         <div className="sec-head">
           <span>페이지</span>
@@ -62,6 +64,7 @@ export const LeftPanel = forwardRef<HTMLInputElement, {
         <label className="search">
           <Icon name="search" size={14} />
           <input ref={searchRef} value={q} placeholder="보드 찾기 (⌘K)" aria-label="보드 찾기" onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing) return;
             if (e.key === "Enter" && list[0]) p.onPick(list[0], false);
             if (e.key === "Escape") {
               setQ("");
@@ -228,6 +231,7 @@ function NumField({ label, value, min, max, onCommit }: { label: string; value: 
     <label className="num">
       <span>{label}</span>
       <input inputMode="numeric" value={v} onChange={(e) => setV(e.target.value)} onBlur={commit} onKeyDown={(e) => {
+        if (e.nativeEvent.isComposing) return;
         if (e.key === "Enter") (e.target as HTMLInputElement).blur();
         if (e.key === "ArrowUp" || e.key === "ArrowDown") {
           e.preventDefault();

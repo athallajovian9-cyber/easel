@@ -115,13 +115,16 @@ export function useEditMode(editFile: string | null, getFrame: (f: string) => HT
         hooksRef.current?.onContext?.(p, { clientX: r.left + e.clientX * s, clientY: r.top + e.clientY * s });
       };
       const onKey = (e: KeyboardEvent) => {
-        if ((e.target as HTMLElement)?.isContentEditable) return;
+        if (e.isComposing || (e.target as HTMLElement)?.isContentEditable) return; // 한글 조합 중·글자 고치는 중에는 단축키를 넘기지 않는다
         if (e.key === "Escape") {
           const cur = pathsRef.current;
-          if (!cur.length) return;
-          const last = cur[cur.length - 1];
-          const up = last.includes("/") ? last.slice(0, last.lastIndexOf("/")) : null;
-          void select(up == null ? [] : [up]);
+          if (cur.length) {
+            // 선택이 있으면 상위로만 가고, 앱에는 넘기지 않는다(편집 모드 끝내기는 선택이 없을 때 Esc)
+            const last = cur[cur.length - 1];
+            const up = last.includes("/") ? last.slice(0, last.lastIndexOf("/")) : null;
+            void select(up == null ? [] : [up]);
+            return;
+          }
         }
         // 나머지 단축키는 앱 창으로 넘긴다(⌘Z 등)
         window.dispatchEvent(new KeyboardEvent("keydown", { key: e.key, code: e.code, metaKey: e.metaKey, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey }));

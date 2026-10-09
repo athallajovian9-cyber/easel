@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { api, clientId, connectEvents, type ServerEvent } from "./api";
 import { Canvas, clamp, fitView, isTyping, MAX_ZOOM, MIN_ZOOM, type ContextTarget, type Rect } from "./Canvas";
+import { AssetGrid, AssetPicker, type Asset } from "./assets";
 import { ChatPanel, type Attach, type ChatEvent } from "./chat";
+import { alignOps, EditHandles, type DropPlan } from "./elementDrag";
 import { elementAt, inlineStyles, rectOf } from "./editor";
 import { Icon, type IconName } from "./icons";
 import { Inspector, type Comment } from "./Inspector";
@@ -75,6 +77,9 @@ export function App() {
   }, []);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
   const savingRef = useRef(0);
+  const [leftTab, setLeftTab] = useState<"boards" | "assets">("boards");
+  const [assetsVersion, setAssetsVersion] = useState(0);
+  const [picker, setPicker] = useState<null | ((a: Asset) => void)>(null);
   /** 아직 board.json에 안 들어온 새 보드로 이동해야 할 때(안 N개 등): 들어오면 이동 */
   const [locate, setLocate] = useState<string[] | null>(null);
   const restored = useRef(false);
@@ -222,7 +227,7 @@ export function App() {
         if (!(await doEdit({ op: "setText", path, hash, text }))) el.textContent = before;
       };
       const onKey = (e: KeyboardEvent) => {
-        if (e.isComposing) return;
+        if (e.isComposing || e.keyCode === 229) return; // 조합 중 Enter는 글자 확정일 뿐
         if (e.key === "Enter" && !e.shiftKey) {
           e.preventDefault();
           el.blur();
@@ -231,11 +236,83 @@ export function App() {
           el.blur();
         }
       };
+      // 한글 조합 중에 포커스가 빠지면 조합이 끝날 때까지 기다렸다가 저장한다
+      let composing = false;
+      let blurWhileComposing = false;
+      const onStart = () => (composing = true);
+      const onEnd = () => {
+        composing = false;
+        if (blurWhileComposing) done();
+      };
+      const done = () => {
+        el.removeEventListener("compositionstart", onStart);
+        el.removeEventListener("compositionend", onEnd);
+        el.removeEventListener("blur", onBlur);
+        void finish();
+      };
+      const onBlur = () => {
+        if (composing) blurWhileComposing = true;
+        else done();
+      };
+      el.addEventListener("compositionstart", onStart);
+      el.addEventListener("compositionend", onEnd);
       el.addEventListener("keydown", onKey);
-      el.addEventListener("blur", () => void finish(), { once: true });
+      el.addEventListener("blur", onBlur);
     },
     [editFile, doEdit],
   );
+  const hashOf = (file: string, path: string) => api.get<{ hash: string }>(`/api/element?f=${encodeURIComponent(file)}&path=${encodeURIComponent(path)}`).then((r) => r.hash);
+  /** 요소 옮기기: 옮긴 뒤 새 경로를 계산해 다시 고른다 */
+  const moveElement = async (path: string, plan: DropPlan) => {
+    if (!editFile) return;
+    const hash = await hashOf(editFile, path);
+    if (!(await doEdit({ op: "move", path, hash, ...plan }))) return;
+    void editRef.current?.select([movedPath(path, plan.toParentPath, plan.index)]);
+    toast({ text: plan.freeze.length ? "옮겼어요 (원래 자리 크기를 고정)" : "옮겼어요", action: undoAction });
+  };
+  /** ⌘C: 요소 소스를 앱 클립보드(다른 보드에서도)와 시스템 클립보드에 */
+  const copyElement = async () => {
+    const sel = edit.state.selection;
+    if (!editFile || !sel) return;
+    const { source } = await api.get<{ source: string }>(`/api/element?f=${encodeURIComponent(editFile)}&path=${encodeURIComponent(sel.path)}&full=1`);
+    try {
+      localStorage.setItem("design-canvas:clip", JSON.stringify({ source, file: editFile, path: sel.path, tag: sel.tag }));
+    } catch {
+      /* 무시 */
+    }
+    await navigator.clipboard?.writeText(source).catch(() => {});
+    toast({ tone: "ok", text: `<${sel.tag}> 복사 — 다른 보드에서 편집 중 ${mod}V로 붙여요` });
+  };
+  /** ⌘V: 고른 요소 뒤(없으면 본문 끝)에 붙인다 */
+  const pasteElement = async () => {
+    if (!editFile) return;
+    let clip: { source: string; file: string; tag: string } | null = null;
+    try {
+      clip = JSON.parse(localStorage.getItem("design-canvas:clip") ?? "null");
+    } catch {
+      clip = null;
+    }
+    if (!clip) return toast({ text: "복사한 요소가 없어요. 편집 중 요소를 고르고 ⌘C" });
+    const sel = edit.state.selection;
+    const path = sel?.file === editFile ? sel.path : "";
+    if (await doEdit({ op: "insert", path, hash: path ? sel!.hash : undefined, position: "after", html: clip.source })) {
+      toast({ tone: "ok", text: `${clip.file}의 <${clip.tag}>를 붙였어요`, action: undoAction });
+      if (path) {
+        const parts = path.split("/");
+        parts[parts.length - 1] = String(Number(parts[parts.length - 1]) + 1);
+        setTimeout(() => void editRef.current?.select([parts.join("/")]), 600);
+      }
+    }
+  };
+  const replaceImage = (path: string, isImg: boolean) =>
+    setPicker(() => async (a: Asset) => {
+      setPicker(null);
+      if (!editFile) return;
+      const hash = await hashOf(editFile, path);
+      const ok = isImg ? await doEdit({ op: "setAttr", path, hash, name: "src", value: a.ref }) : await doEdit({ op: "setStyle", path, hash, prop: "background-image", value: `url("${a.ref}")` });
+      if (ok) toast({ tone: "ok", text: `이미지를 ${a.name}로 바꿨어요`, action: undoAction });
+    });
+
   const onElementContext = useCallback((path: string, at: { clientX: number; clientY: number }) => elementMenuRef.current?.(path, at), []);
   const elementMenuRef = useRef<((path: string, at: { clientX: number; clientY: number }) => void) | null>(null);
   const edit = useEditMode(editFile, getFrame, { onTextEdit, onContext: onElementContext });
@@ -252,6 +329,7 @@ export function App() {
         else if (e.type === "comments-changed") void loadComments();
         else if (e.type === "history-changed") void loadHistory();
         else if (e.type === "errors-changed") void loadErrors();
+        else if (e.type === "assets-changed") setAssetsVersion((v) => v + 1);
         else if (e.type === "chat") for (const fn of chatListeners.current) fn(e.id, e.ev);
       }),
     [load, loadComments, loadHistory, loadErrors],
@@ -600,6 +678,9 @@ export function App() {
         { label: "글자 고치기", icon: "edit", disabled: !el || el.children.length > 0, run: () => el && onTextEdit(el as HTMLElement, path) },
         { label: "부모 선택", icon: "layers", shortcut: "Esc", disabled: up == null, run: () => up != null && void edit.select([up]) },
         { label: "이 요소를 AI에게", icon: "comment", run: () => openChat() },
+        { label: "복사", icon: "copy", shortcut: `${mod}C`, run: () => void copyElement() },
+        { label: "뒤에 붙여넣기", icon: "copy", shortcut: `${mod}V`, run: () => void pasteElement() },
+        ...(el?.tagName === "IMG" ? [{ label: "이미지 바꾸기…", icon: "page" as IconName, run: () => replaceImage(path, true) }] : []),
         { label: "AI용 설명 복사", icon: "copy", run: () => void navigator.clipboard.writeText(`${editFile} ${path} <${el?.tagName.toLowerCase()}> "${(el?.textContent ?? "").trim().slice(0, 60)}"`).then(() => toast({ tone: "ok", text: "복사했어요" })) },
         "sep",
         { label: "복제", icon: "copy", shortcut: `${mod}D`, run: async () => void doEdit({ op: "duplicate", path, hash: await getHash() }) },
@@ -636,6 +717,12 @@ export function App() {
     if (cmd && k === "j") return run(() => (rightTab === "chat" ? setRightTab("inspect") : openChat()));
     if (cmd && k === "k") return run(() => { setLeftOpen(true); setTimeout(() => searchRef.current?.focus(), 0); });
     if (cmd && k === "a" && !editFile) return run(() => select(visibleBoards));
+    if (cmd && k === "c" && editFile && edit.state.selection) return run(() => void copyElement());
+    if (cmd && k === "v" && editFile) return run(() => void pasteElement());
+    if (cmd && k === "d" && editFile && edit.state.selection) {
+      const sel = edit.state.selection;
+      return run(() => void doEdit({ op: "duplicate", path: sel.path, hash: sel.hash }));
+    }
     if (cmd && k === "d" && one && !editFile) return run(() => void duplicateBoard(one));
     if (cmd && e.key === "]" && selected.length) return run(() => reorder(selected, "front"));
     if (cmd && e.key === "[" && selected.length) return run(() => reorder(selected, "back"));
@@ -695,6 +782,25 @@ export function App() {
       <div className="overlay">
         {editing && edit.state.hover && !edit.state.paths.includes(edit.state.hover.path) && <Box r={edit.state.hover.rect} cls="hover" />}
         {editing && edit.state.rects.map((r, i) => <Box key={i} r={r} cls="sel" />)}
+        {editing && doc && edit.state.paths.length === 1 && edit.state.rects[0] && (
+          <EditHandles
+            doc={doc}
+            path={edit.state.paths[0]}
+            rect={edit.state.rects[0]}
+            zoom={view.zoom}
+            onMove={(plan) => void moveElement(edit.state.paths[0], plan)}
+            onPosition={async (left, top) => {
+              const path = edit.state.paths[0];
+              const hash = await hashOf(f, path);
+              await doEdit({ op: "batch", ops: [{ op: "setStyle", path, hash, prop: "left", value: `${left}px` }, { op: "setStyle", path, hash, prop: "top", value: `${top}px` }] });
+            }}
+            onResize={async (w, h) => {
+              const path = edit.state.paths[0];
+              const hash = await hashOf(f, path);
+              await doEdit({ op: "batch", ops: [{ op: "setStyle", path, hash, prop: "width", value: `${w}px` }, { op: "setStyle", path, hash, prop: "height", value: `${h}px` }] });
+            }}
+          />
+        )}
         {pins.map((c, i) => {
           const el = doc && c.path ? elementAt(doc, c.path) : null;
           const r = el ? rectOf(el) : null;
@@ -735,6 +841,16 @@ export function App() {
     const vx = -view.x / view.zoom, vy = -view.y / view.zoom, vw = size.w / view.zoom, vh = size.h / view.zoom;
     return visibleBoards.filter((f) => { const b = board.boards[f]; return b.x < vx + vw && b.x + b.w > vx && b.y < vy + vh && b.y + b.h > vy; }).length;
   })();
+  const leftTabs = (
+    <div className="left-tabs" role="tablist" aria-label="왼쪽 패널">
+      <button role="tab" aria-selected={leftTab === "boards"} className={leftTab === "boards" ? "on" : ""} onClick={() => setLeftTab("boards")}>
+        보드
+      </button>
+      <button role="tab" aria-selected={leftTab === "assets"} className={leftTab === "assets" ? "on" : ""} onClick={() => setLeftTab("assets")}>
+        자산
+      </button>
+    </div>
+  );
   const rects = visibleBoards.map((f) => ({ file: f, ...board.boards[f] }));
 
   return (
@@ -817,7 +933,14 @@ export function App() {
       </header>
       <div className="main">
         {leftOpen && (
+          leftTab === "assets" ? (
+            <aside className="left" aria-label="자산">
+              {leftTabs}
+              <AssetGrid version={assetsVersion} onError={(m) => toast({ tone: "error", text: m })} onUploaded={(a) => toast({ tone: "ok", text: `${a.map((x) => x.name).join(", ")}를 올렸어요` })} />
+            </aside>
+          ) : (
           <LeftPanel
+            header={leftTabs}
             ref={searchRef}
             board={board}
             pages={pages}
@@ -838,6 +961,7 @@ export function App() {
               setMenu({ x: at.clientX, y: at.clientY, title: board.boards[f]?.title ?? f, items: boardMenuItems(f) });
             }}
           />
+          )
         )}
         <div className="canvas-wrap">
           <Canvas
@@ -974,6 +1098,13 @@ export function App() {
             const paths = edit.state.paths;
             return (
               <Properties
+                onAlign={async (dir) => {
+                  const d = frames.current.get(editFile)?.contentDocument;
+                  const ops = d && alignOps(d, sel.path, sel.hash, dir);
+                  if (!ops) return toast({ text: "블록 흐름에서는 세로 정렬을 쓸 수 없어요. 부모를 flex로 바꿔 보세요" });
+                  await doEdit({ op: "batch", ops });
+                }}
+                onReplaceImage={sel.tag === "img" || /url\(/.test(sel.styles["background-image"] ?? "") ? () => replaceImage(sel.path, sel.tag === "img") : null}
                 selection={sel}
                 inline={el ? inlineStyles(el) : {}}
                 attrs={attrs}
@@ -1035,10 +1166,21 @@ export function App() {
           onNav={setFocusFile}
         />
       )}
+      <AssetPicker open={!!picker} version={assetsVersion} onClose={() => setPicker(null)} onPick={(a) => picker?.(a)} onError={(m) => toast({ tone: "error", text: m })} />
       <ContextMenu menu={menu} onClose={() => setMenu(null)} />
       <Dialog state={ask.state} onClose={ask.close} />
     </div>
   );
+}
+
+/** 옮긴 뒤 요소의 경로: 같은 부모 안 index, 그리고 잘라낸 자리 뒤의 조상 인덱스는 하나씩 당겨진다 */
+export function movedPath(from: string, toParent: string, index: number) {
+  const f = from.split("/").map(Number);
+  const t = toParent === "" ? [] : toParent.split("/").map(Number);
+  // 대상 부모 경로가 잘라낸 요소의 (나중) 형제 아래를 지나면 그 단계 인덱스를 하나 줄인다
+  const depth = f.length - 1;
+  if (t.length > depth && t.slice(0, depth).every((v, i) => v === f[i]) && t[depth] > f[depth]) t[depth]--;
+  return [...t, index].join("/");
 }
 
 function Box({ r, cls }: { r: { x: number; y: number; w: number; h: number }; cls: string }) {

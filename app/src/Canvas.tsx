@@ -497,6 +497,13 @@ function NoteView(props: { note: Note; zoom: number; selected: boolean; onSelect
       s?.addRange(r);
     }
   }, [editing]);
+  const composing = useRef(false);
+  const blurPending = useRef(false);
+  const commitText = (el: HTMLDivElement) => {
+    setEditing(false);
+    const text = el.innerText;
+    if (text !== n.text) props.onMove({ text }, true);
+  };
   const style = n.kind === "title" ? { left: n.x, top: n.y, maxWidth: n.maxW ?? 4000 } : { left: n.x, top: n.y, width: n.w ?? 320 };
   return (
     <div
@@ -526,12 +533,21 @@ function NoteView(props: { note: Note; zoom: number; selected: boolean; onSelect
         className="note-text"
         contentEditable={editing}
         suppressContentEditableWarning
+        onCompositionStart={() => (composing.current = true)}
+        onCompositionEnd={(e) => {
+          composing.current = false;
+          if (blurPending.current) {
+            blurPending.current = false;
+            commitText(e.currentTarget as HTMLDivElement);
+          }
+        }}
         onBlur={(e) => {
-          setEditing(false);
-          const text = (e.currentTarget as HTMLDivElement).innerText;
-          if (text !== n.text) props.onMove({ text }, true);
+          // 한글 조합 중 포커스가 빠지면 조합이 끝난 뒤 저장
+          if (composing.current) blurPending.current = true;
+          else commitText(e.currentTarget as HTMLDivElement);
         }}
         onKeyDown={(e) => {
+          if (e.nativeEvent.isComposing) return;
           if (e.key === "Escape") (e.currentTarget as HTMLDivElement).blur();
         }}
       >
