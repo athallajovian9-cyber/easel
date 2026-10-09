@@ -111,6 +111,17 @@ export function applyEdit(html, req) {
   if (op === "setText") {
     const { node } = target(html, path, hash);
     const kids = node.childNodes ?? [];
+    // 여러 줄: 글자와 <br>만 있는 요소는 안쪽 전체를 "줄<br>줄"로 바꾼다
+    const onlyBr = elementChildren(node).every((k) => k.tagName === "br") && kids.every((k) => k.nodeName === "#text" || k.nodeName === "br" || k.nodeName === "#comment");
+    if (onlyBr && (String(req.text).includes("\n") || elementChildren(node).length)) {
+      const st = node.sourceCodeLocation?.startTag;
+      const et = node.sourceCodeLocation?.endTag;
+      if (!st || !et) throw new EditError(422, "위치를 알 수 없어요");
+      const inner = html.slice(st.endOffset, et.startOffset);
+      const lead = inner.match(/^\s*/)[0];
+      const trail = inner.match(/\s*$/)[0];
+      return splice(html, st.endOffset, et.startOffset, lead + String(req.text).split("\n").map(escText).join("<br>") + trail);
+    }
     if (elementChildren(node).length) throw new EditError(422, "글자 하나만 있는 요소만 바로 고칠 수 있어요");
     const texts = kids.filter((k) => k.nodeName === "#text");
     if (texts.length > 1 || kids.some((k) => k.nodeName !== "#text" && k.nodeName !== "#comment")) throw new EditError(422, "글자 하나만 있는 요소만 바로 고칠 수 있어요");

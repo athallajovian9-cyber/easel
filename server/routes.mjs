@@ -48,6 +48,13 @@ async function writeComments(ctx, comments) {
 
 /* ---------- 스크린샷 (playwright가 있으면) ---------- */
 let browserPromise = null;
+/** 서버가 끝날 때 스크린샷·미리보기용 크로뮴도 닫는다(남으면 고아 프로세스가 됨) */
+export async function closeBrowser() {
+  const b = await browserPromise?.catch(() => null);
+  browserPromise = null;
+  await b?.close().catch(() => {});
+}
+
 async function getBrowser() {
   if (!browserPromise) {
     browserPromise = (async () => {
@@ -60,6 +67,27 @@ async function getBrowser() {
     browserPromise.catch(() => (browserPromise = null));
   }
   return browserPromise;
+}
+
+/** 미리보기 만들기는 두 개씩만 */
+let running = 0;
+const waiting = [];
+function thumbQueue(job) {
+  return new Promise((resolve, reject) => {
+    const run = async () => {
+      running++;
+      try {
+        resolve(await job());
+      } catch (e) {
+        reject(e);
+      } finally {
+        running--;
+        waiting.shift()?.();
+      }
+    };
+    if (running < 2) void run();
+    else waiting.push(run);
+  });
 }
 
 export async function screenshot(ctx, port, file, elPath) {
@@ -124,6 +152,44 @@ export const extraRoutes = [
   ...boardRoutes(),
   ...chat.routes,
   ...tokenRoutes(),
+  // 축소 미리보기: 25% 아래에서 빈 틀 대신 보여 줄 작은 그림. docs/design/.thumbs/(gitignore)에 수정 시각별로 저장
+  [
+    "GET",
+    "/api/thumb",
+    async (req, res, url, ctx) => {
+      const f = url.searchParams.get("f") ?? "";
+      const src = safeJoin(ctx.store.screensDir, f);
+      const st = src && (await fs.stat(src).catch(() => null));
+      if (!st) return sendJson(res, 404, { error: "파일이 없어요" });
+      const dir = path.join(ctx.dir, ".thumbs");
+      const out = path.join(dir, `${f.replace(/[\\/]/g, "_")}.${Math.round(st.mtimeMs)}.jpg`);
+      let buf = await fs.readFile(out).catch(() => null);
+      if (!buf) {
+        buf = await thumbQueue(async () => {
+          await fs.mkdir(dir, { recursive: true });
+          await fs.writeFile(path.join(dir, ".gitignore"), "*\n").catch(() => {});
+          const board = (await ctx.store.readBoard()).boards[f];
+          const w = board?.w ?? 390;
+          const h = board?.h ?? 844;
+          const browser = await getBrowser();
+          const page = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: Math.min(0.5, 600 / Math.max(w, h)) });
+          try {
+            await page.goto(`http://127.0.0.1:${req.socket.localPort}/screens/${encodeURI(f)}`, { waitUntil: "load", timeout: 15000 });
+            await page.waitForTimeout(150);
+            const b = await page.screenshot({ type: "jpeg", quality: 70 });
+            // 옛 미리보기는 지운다
+            for (const n of await fs.readdir(dir)) if (n.startsWith(f.replace(/[\\/]/g, "_") + ".") && path.join(dir, n) !== out) await fs.rm(path.join(dir, n), { force: true });
+            await fs.writeFile(out, b);
+            return b;
+          } finally {
+            await page.close();
+          }
+        });
+      }
+      res.writeHead(200, { "Content-Type": "image/jpeg", "Content-Length": buf.length, "Cache-Control": "max-age=31536000, immutable" });
+      res.end(buf);
+    },
+  ],
   ...snapshotRoutes(),
   // 자산 보관함: docs/design/assets/ 목록과 올리기(이미지·폰트). 화면에서는 ../assets/<이름>으로 쓴다
   [
