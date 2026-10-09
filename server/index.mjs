@@ -8,6 +8,7 @@ import { WebSocketServer } from "ws";
 
 import { TOOL_ROOT } from "./args.mjs";
 import { createBoardStore } from "./board.mjs";
+import { createHistory } from "./history.mjs";
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -86,7 +87,7 @@ async function appIsStale(distDir) {
 export async function createServer({ dir, port, dev = true, extraRoutes = [] }) {
   if (!existsSync(dir)) throw new Error(`디자인 폴더가 없어요: ${dir}`);
   const store = createBoardStore(dir);
-  const ctx = { dir, store, broadcast: () => {} };
+  const ctx = { dir, store, history: createHistory(), broadcast: () => {} };
 
   // 앱 화면: 시작할 때 앱 소스가 dist보다 새로우면 한 번 빌드하고 dist를 정적 서빙한다.
   // (Vite 개발 서버는 HMR을 꺼도 웹소켓 클라이언트를 넣어 콘솔 오류가 나서 쓰지 않는다)
@@ -97,6 +98,7 @@ export async function createServer({ dir, port, dev = true, extraRoutes = [] }) 
   }
   if (!existsSync(path.join(distDir, "index.html"))) throw new Error("앱 빌드가 없어요(npm start로 실행하면 만들어져요)");
 
+  const LOCKED = /^\/api\/(board|boards\/|history\/|edit|undo|redo|place)/;
   const routes = [
     ["GET", "/api/health", async (req, res) => sendJson(res, 200, { ok: true, dir })],
     [
@@ -105,25 +107,6 @@ export async function createServer({ dir, port, dev = true, extraRoutes = [] }) 
       async (req, res) => {
         const { board, files, missing } = await store.syncBoard();
         sendJson(res, 200, { board, files, missing, dir });
-      },
-    ],
-    [
-      "PUT",
-      "/api/board",
-      async (req, res) => {
-        const body = await readBody(req);
-        if (!body || typeof body.boards !== "object") return sendJson(res, 400, { error: "boards가 필요해요" });
-        const board = {
-          version: 1,
-          title: body.title ?? "",
-          pages: Array.isArray(body.pages) ? body.pages : [],
-          boards: body.boards,
-          order: Array.isArray(body.order) ? body.order : Object.keys(body.boards),
-          notes: body.notes ?? {},
-        };
-        await store.writeBoard(board);
-        ctx.broadcast({ type: "board-changed", source: body.clientId ?? null });
-        sendJson(res, 200, { ok: true });
       },
     ],
     [
@@ -142,7 +125,8 @@ export async function createServer({ dir, port, dev = true, extraRoutes = [] }) 
         }
       },
     ],
-    ...extraRoutes.map((r) => [r[0], r[1], (req, res, url) => r[2](req, res, url, ctx)]),
+    // 보드·파일을 바꾸는 요청은 store.exclusive로 하나씩(자동 배치와 겹치지 않게)
+    ...extraRoutes.map((r) => [r[0], r[1], (req, res, url) => (r[0] !== "GET" && LOCKED.test(r[1]) ? store.exclusive(() => r[2](req, res, url, ctx)) : r[2](req, res, url, ctx))]),
   ];
 
   const server = http.createServer(async (req, res) => {

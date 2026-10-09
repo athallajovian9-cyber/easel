@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { TOOL_ROOT } from "./args.mjs";
+import { boardRoutes } from "./boards.mjs";
 import { applyEdit, EditError } from "./edit.mjs";
 import { writeAtomic } from "./fsutil.mjs";
 import { inspect, outline } from "./html.mjs";
@@ -12,14 +13,6 @@ import { watchDesign } from "./watch.mjs";
 
 const OUTER_LIMIT = 4096;
 let selection = null;
-
-/* ---------- 실행 취소: 파일별 메모리 기록(최근 50) ---------- */
-const HISTORY_LIMIT = 50;
-const history = new Map(); // file → { undo: [{before, after}], redo: [...] }
-const hist = (f) => {
-  if (!history.has(f)) history.set(f, { undo: [], redo: [] });
-  return history.get(f);
-};
 
 async function writeScreen(ctx, p, html) {
   await writeAtomic(p, html);
@@ -109,37 +102,22 @@ export const extraRoutes = [
       }
       if (next === html) return sendJson(res, 200, { ok: true, changed: false });
       await writeScreen(ctx, p, next);
-      const h = hist(b.file);
-      h.undo.push({ before: html, after: next, op: b.op });
-      if (h.undo.length > HISTORY_LIMIT) h.undo.shift();
-      h.redo = [];
+      ctx.history.push(`${b.file} ${b.op}`, [{ path: p, before: html, after: next }]);
+      ctx.broadcast({ type: "history-changed" });
       sendJson(res, 200, { ok: true, changed: true });
     },
   ],
+  // 예전 경로: 시간순 기록으로 넘긴다
   ...["undo", "redo"].map((kind) => [
     "POST",
     `/api/${kind}`,
     async (req, res, url, ctx) => {
-      const b = await readBody(req);
-      const { p, html } = await readScreen(ctx, b.file);
-      const h = hist(b.file);
-      const from = kind === "undo" ? h.undo : h.redo;
-      const to = kind === "undo" ? h.redo : h.undo;
-      const step = from[from.length - 1];
-      if (!step) return sendJson(res, 200, { ok: true, changed: false, message: kind === "undo" ? "되돌릴 편집이 없어요" : "다시 할 편집이 없어요" });
-      // 그사이 다른 사람·AI가 파일을 고쳤으면 덮어쓰지 않는다
-      const expect = kind === "undo" ? step.after : step.before;
-      if (html !== expect) {
-        h.undo = [];
-        h.redo = [];
-        return sendJson(res, 409, { error: "파일이 밖에서 바뀌어 기록을 비웠어요" });
-      }
-      from.pop();
-      to.push(step);
-      await writeScreen(ctx, p, kind === "undo" ? step.before : step.after);
-      sendJson(res, 200, { ok: true, changed: true, op: step.op });
+      const step = await ctx.history[kind]();
+      ctx.broadcast({ type: "history-changed" });
+      sendJson(res, 200, { ok: true, changed: !!step, label: step?.label ?? null });
     },
   ]),
+  ...boardRoutes(),
   [
     "GET",
     "/api/element",
@@ -242,7 +220,7 @@ export const extraRoutes = [
     async (req, res, url, ctx) => {
       const b = await readBody(req);
       await readScreen(ctx, b.file);
-      const { board } = await ctx.store.syncBoard();
+      const { board } = await ctx.store.syncBoardNow();
       const cur = board.boards[b.file];
       board.boards[b.file] = {
         ...cur,

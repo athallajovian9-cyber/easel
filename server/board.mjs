@@ -19,6 +19,7 @@ export function createBoardStore(dir) {
       const raw = await fs.readFile(boardPath, "utf8");
       const b = JSON.parse(raw);
       return {
+        ...b,
         version: 1,
         title: b.title ?? path.basename(dir),
         pages: b.pages ?? [],
@@ -89,8 +90,19 @@ export function createBoardStore(dir) {
     return { x: left, y: bottom + GAP_Y, ...size };
   }
 
+  // 보드·파일을 바꾸는 요청과 자동 배치를 한 줄로 세운다. 실행 취소가 board.json을 쓰고 파일을 지우는 사이에
+  // 자동 배치가 끼어들면 지운 보드가 되살아난다.
+  let chain = Promise.resolve();
+  function exclusive(fn) {
+    const run = chain.then(fn, fn);
+    chain = run.catch(() => {});
+    return run;
+  }
+
   /** board.json에 없는 파일은 자동 배치해 기록하고, 결과와 누락·고아 목록을 돌려준다 */
-  async function syncBoard() {
+  const syncBoard = () => exclusive(syncBoardNow);
+  /** exclusive 안에서 부르는 판 */
+  async function syncBoardNow() {
     const board = await readBoard();
     const files = await listScreenFiles();
     const fileSet = new Set(files);
@@ -107,5 +119,5 @@ export function createBoardStore(dir) {
     return { board, files, missing, added: changed };
   }
 
-  return { dir, screensDir, boardPath, readBoard, writeBoard, listScreenFiles, syncBoard, readBoardSize, lastWritten: () => lastWritten };
+  return { dir, screensDir, boardPath, readBoard, writeBoard, listScreenFiles, syncBoard, syncBoardNow, exclusive, readBoardSize, lastWritten: () => lastWritten };
 }
