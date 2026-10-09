@@ -1,0 +1,38 @@
+{
+  "name": "design-canvas",
+  "version": "0.1.0",
+  "private": true,
+  "description": "로컬 디자인 캔버스: docs/design/screens/*.html을 보드로 보여주고 원본을 직접 고친다 (DEV-26)",
+  "type": "module",
+  "bin": {
+    "design-canvas": "bin/server.mjs",
+    "design-canvas-mcp": "bin/mcp.mjs"
+  },
+  "scripts": {
+    "start": "node bin/server.mjs",
+    "mcp": "node bin/mcp.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "chokidar": "^4.0.3",
+    "parse5": "^7.3.0",
+    "ws": "^8.18.2"
+  },
+  "optionalDependencies": {
+    "playwright": "^1.52.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.5.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  }
+}
