@@ -5,6 +5,8 @@ import path from "node:path";
 
 import chokidar from "chokidar";
 
+import { createDeps } from "./deps.mjs";
+
 export function watchDesign({ dir, store, broadcast }) {
   const screensDir = store.screensDir;
   const watcher = chokidar.watch([screensDir, store.boardPath], {
@@ -17,6 +19,8 @@ export function watchDesign({ dir, store, broadcast }) {
     awaitWriteFinish: { stabilityThreshold: 120, pollInterval: 40 },
   });
 
+  const deps = createDeps(screensDir);
+  store.listScreenFiles().then((files) => deps.init(files));
   let syncTimer = null;
   const scheduleSync = () => {
     clearTimeout(syncTimer);
@@ -45,7 +49,11 @@ export function watchDesign({ dir, store, broadcast }) {
     if (!abs.endsWith(".html")) return;
     const file = path.relative(screensDir, abs).split(path.sep).join("/");
     const kind = event === "add" ? "add" : event === "unlink" ? "unlink" : "change";
+    if (kind === "unlink") deps.remove(file);
+    else await deps.update(file);
     broadcast({ type: "file-changed", file, kind });
+    // 이 화면을 끼운 보드(흐름도 등)도 다시 그린다
+    for (const host of deps.dependents(file)) broadcast({ type: "file-changed", file: host, kind: "change", via: file });
     if (kind !== "change") scheduleSync();
   });
 

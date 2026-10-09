@@ -17,9 +17,9 @@
 
 | 판정 | 개수 |
 | --- | --- |
-| PASS | 12 |
+| PASS | 13 |
 | PARTIAL | 29 |
-| MISSING | 30 |
+| MISSING | 29 |
 | N/A | 3 |
 | 합계 | 74 |
 
@@ -69,7 +69,7 @@
 | 28 | D 프로토 | Play(그 자리, 전체 화면) | 둘 다 | 전체 화면 오버레이만. 보드 그 자리에서 실행 없음 | PARTIAL | `D28.play_nav`="SCR-04 상품 상세" · `D28-play.png` | S |
 | 29 | D 프로토 | 링크(상대·`/`루트·`#id`·외부 새 탭) | 모두 | 상대 경로와 `#id`는 브라우저 기본으로 됨. `/scr-02.html`은 캔버스 앱 index를 돌려줘 엉뚱한 화면이 뜸. 외부 링크는 iframe 안에서 열림 | PARTIAL | `D29.root_path_status`=200(앱 페이지), `D29.external_links_target`=[] | S |
 | 30 | D 프로토 | 스크립트(상태·이벤트·조건·반복) | 됨 | iframe에서 그대로 실행 | PASS | `D30.script_runs`: 버튼 두 번 → "2" | S |
-| 31 | D 프로토 | 다른 보드 끼워 넣기, 원본 바뀌면 갱신 | dc-import가 따라 바뀜 | 흐름도처럼 iframe으로 끼운 보드는 원본이 바뀌어도 그대로(바뀐 파일의 보드만 다시 불러옴) | MISSING | `D31.embedded_refresh`: scr-15 수정 후 f-3 안 false | S |
+| 31 | D 프로토 | 다른 보드 끼워 넣기, 원본 바뀌면 갱신 | dc-import가 따라 바뀜 | 화면마다 iframe src를 색인해, 원본이 바뀌면 그 화면을 직접·간접으로 끼운 보드도 다시 불러옴 | PASS | 단위 테스트 deps(직접·간접), e2e: scr-15 수정 → f-3 안 iframe에 반영 4초 안 | S |
 | 32 | D 프로토 | Tweaks(색·enum·boolean·숫자 조절) | 패널에서 조절 | 없음(PLAN 범위 밖). 대체 제안: `:root`의 CSS 변수와 `<meta name="tweak" …>` 선언을 읽어 속성 패널에 표시 | MISSING | PLAN 0장 범위 밖 | M |
 | 33 | E AI | AI가 새 HTML → 즉시 보드·자동 배치 | 됨 | 323ms 안에 보드가 생기고 board-size 메타 크기로 '새 화면' 줄에 배치. Claude Code·Codex 둘 다 새 화면 생성 → 자동 배치 → `place_board` 제목 확인 | PASS | `E33.*`, Claude Code(.mcp.json, claude -p) 2026-10-09: zz-claude-test.html 생성·제목 'Claude 시험' 캔버스 표시, Codex(M7) 같은 결과 | S |
 | 34 | E AI | AI 수정 즉시 반영(스크롤·선택 유지) | 됨 | 484ms에 그 보드만 다시 불러오고 같은 경로로 다시 선택. Claude Code·Codex 모두 "선택한 것 고쳐" → 그 글자만 바뀌고 캔버스 반영. 스크롤 되돌림은 스크롤 있는 보드에서 아직 시험 못 함 | PARTIAL | `E34.reflect_ms`=484, Claude Code: scr-32 0/1/1/5 글자만 수정(diff 1줄)·캔버스 반영 true, Codex(M7) 같은 결과 | S |
