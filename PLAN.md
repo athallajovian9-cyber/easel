@@ -146,6 +146,7 @@ claude mcp add --scope project design-canvas -- node tools/design-canvas/bin/mcp
 [mcp_servers.design-canvas]
 command = "node"
 args = ["<레포 절대경로>/tools/design-canvas/bin/mcp.mjs", "--port", "4317"]
+default_tools_approval_mode = "approve"  # 없으면 codex exec(승인 정책 never)에서 MCP 호출이 막힘
 ```
 
 ## 7. 오늘 순서 (마일스톤마다 커밋, 시간 초과 시 M6 제외)
