@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { api, clientId, connectEvents, type ServerEvent } from "./api";
 import { Canvas, fitView, isTyping } from "./Canvas";
+import { Play } from "./Play";
 import type { Board, BoardItem, BoardResponse, Note, View } from "./types";
 
 const SAVE_DELAY = 300;
@@ -232,7 +233,18 @@ export function App() {
         onEdit={setEditFile}
         onSize={setCanvasSize}
       />
-      {playFile && <div className="play-placeholder" onClick={() => setPlayFile(null)} />}
+      {playFile && (
+        <Play
+          board={board}
+          file={playFile}
+          onClose={() => setPlayFile(null)}
+          onLocate={(f) => {
+            setSelectedBoard(f);
+            const b = board.boards[f];
+            if (b) setView(fitView([b], canvasSize ?? { w: window.innerWidth, h: window.innerHeight - 48 }, 80));
+          }}
+        />
+      )}
     </div>
   );
 }
