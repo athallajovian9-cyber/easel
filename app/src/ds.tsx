@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { api } from "./api";
 import { pathOf } from "./editor";
 import { Icon } from "./icons";
+import { strings } from "./strings";
 
 export type Tokens = {
   version: 1;
@@ -68,13 +69,13 @@ export function offToken(prop: string, value: string, t: Tokens | null): string 
   const colors = new Set(themeColors(t).map((c) => toHex(c.value)));
   if (/^(color|background|background-color|border-color)$/.test(prop)) {
     const hex = toHex(value);
-    if (hex && !colors.has(hex)) return `토큰에 없는 색`;
+    if (hex && !colors.has(hex)) return strings.checks.colorNotInTokens;
   }
   const px = [...value.matchAll(/(-?\d+(?:\.\d+)?)px/g)].map((m) => Number(m[1]));
-  if (prop === "font-size" && px.some((n) => !t.fontSizes.includes(n))) return `토큰 글자 크기: ${t.fontSizes.join("·")}`;
-  if (prop === "border-radius" && px.some((n) => !t.radii.includes(n) && n < 999)) return `토큰 모서리: ${t.radii.join("·")}`;
-  if (/^(gap|padding|margin)/.test(prop) && px.some((n) => n % 4 !== 0)) return "4 단위가 아니에요";
-  if (prop === "font-weight" && /^\d+$/.test(value) && !t.fontWeights.includes(Number(value))) return `토큰 굵기: ${t.fontWeights.join("·")}`;
+  if (prop === "font-size" && px.some((n) => !t.fontSizes.includes(n))) return strings.checks.tokenFontSizes(t.fontSizes.join("·"));
+  if (prop === "border-radius" && px.some((n) => !t.radii.includes(n) && n < 999)) return strings.checks.tokenRadii(t.radii.join("·"));
+  if (/^(gap|padding|margin)/.test(prop) && px.some((n) => n % 4 !== 0)) return strings.checks.notMultipleOf4;
+  if (prop === "font-weight" && /^\d+$/.test(value) && !t.fontWeights.includes(Number(value))) return strings.checks.tokenWeights(t.fontWeights.join("·"));
   return null;
 }
 
@@ -103,15 +104,15 @@ export function checkA11y(doc: Document, minTarget = 48): A11yItem[] {
     const p = pathOf(el);
     if (p == null) continue;
     const r = el.getBoundingClientRect();
-    if (r.width < minTarget && r.height < minTarget) out.push({ path: p, kind: "target", message: `<${el.tagName.toLowerCase()}> 누르는 영역 ${Math.round(r.width)}×${Math.round(r.height)} (${minTarget} 미만)` });
+    if (r.width < minTarget && r.height < minTarget) out.push({ path: p, kind: "target", message: strings.checks.smallTarget(el.tagName.toLowerCase(), Math.round(r.width), Math.round(r.height), minTarget) });
     const name = (el.getAttribute("aria-label") || el.getAttribute("title") || el.getAttribute("placeholder") || (el as HTMLElement).innerText || el.querySelector("img[alt]")?.getAttribute("alt") || "").trim();
     const labelled = el.getAttribute("aria-labelledby") || (el.id && doc.querySelector(`label[for="${el.id}"]`)) || el.closest("label");
-    if (!name && !labelled) out.push({ path: p, kind: "label", message: `<${el.tagName.toLowerCase()}> 이름이 없어요(aria-label·글자·label)` });
+    if (!name && !labelled) out.push({ path: p, kind: "label", message: strings.checks.noName(el.tagName.toLowerCase()) });
   }
   for (const img of Array.from(doc.body.querySelectorAll("img"))) {
     if (!img.hasAttribute("alt") && visible(img)) {
       const p = pathOf(img);
-      if (p != null) out.push({ path: p, kind: "label", message: "<img> alt가 없어요(꾸밈이면 alt=\"\")" });
+      if (p != null) out.push({ path: p, kind: "label", message: strings.checks.noAlt });
     }
   }
   // 글자 명암: 글자를 직접 가진 요소
@@ -131,7 +132,7 @@ export function checkA11y(doc: Document, minTarget = 48): A11yItem[] {
     const need = large ? 3 : 4.5;
     if (ratio < need) {
       const p = pathOf(el);
-      if (p != null) out.push({ path: p, kind: "contrast", message: `명암 ${ratio.toFixed(2)}:1 (${need} 필요) "${t.textContent.trim().slice(0, 16)}"` });
+      if (p != null) out.push({ path: p, kind: "contrast", message: strings.checks.lowContrast(ratio.toFixed(2), need, t.textContent.trim().slice(0, 16)) });
     }
   }
   return out;
@@ -153,7 +154,7 @@ export function TokenPanel({ tokens, onSave }: { tokens: Tokens; onSave: (t: Tok
   return (
     <div className="tokens">
       <label className="upload small">
-        <Icon name="plus" size={14} /> 토큰 가져오기(tokens.json·Figma 변수 JSON)
+        <Icon name="plus" size={14} /> {strings.tokens.import}
         <input
           type="file"
           hidden
@@ -164,20 +165,20 @@ export function TokenPanel({ tokens, onSave }: { tokens: Tokens; onSave: (t: Tok
             try {
               setT(importTokens(JSON.parse(await f.text()), t));
             } catch (err) {
-              alert(`가져오지 못했어요: ${(err as Error).message}`);
+              alert(strings.tokens.importFailed((err as Error).message));
             }
           }}
         />
       </label>
       <div className="sec-head">
-        <span>테마</span>
+        <span>{strings.tokens.theme}</span>
         <button
           className="icon-btn sm"
-          aria-label="테마 추가(지금 테마 복사)"
-          title="테마 추가(지금 테마 복사)"
+          aria-label={strings.tokens.addTheme}
+          title={strings.tokens.addTheme}
           onClick={() => {
-            let name = "새 테마";
-            for (let i = 2; t.themes[name]; i++) name = `새 테마 ${i}`;
+            let name: string = strings.tokens.newTheme;
+            for (let i = 2; t.themes[name]; i++) name = strings.tokens.newThemeN(i);
             setT({ ...t, themes: { ...t.themes, [name]: { ...colors } }, active: name });
           }}
         >
@@ -185,7 +186,7 @@ export function TokenPanel({ tokens, onSave }: { tokens: Tokens; onSave: (t: Tok
         </button>
       </div>
       <div className="theme-row">
-        <select value={t.active} onChange={(e) => setT({ ...t, active: e.target.value })} aria-label="쓰는 테마">
+        <select value={t.active} onChange={(e) => setT({ ...t, active: e.target.value })} aria-label={strings.tokens.activeTheme}>
           {Object.keys(t.themes).map((n) => (
             <option key={n}>{n}</option>
           ))}
@@ -193,7 +194,7 @@ export function TokenPanel({ tokens, onSave }: { tokens: Tokens; onSave: (t: Tok
         <input
           key={t.active}
           defaultValue={t.active}
-          aria-label="테마 이름"
+          aria-label={strings.tokens.themeName}
           onBlur={(e) => {
             const n = e.target.value.trim();
             if (!n || n === t.active || t.themes[n]) return;
@@ -203,18 +204,18 @@ export function TokenPanel({ tokens, onSave }: { tokens: Tokens; onSave: (t: Tok
         />
       </div>
       <div className="sec-head">
-        <span>색 {Object.keys(colors).length}</span>
-        <button className="icon-btn sm" aria-label="색 추가" title="색 추가" onClick={() => setColors({ ...colors, [`색 ${Object.keys(colors).length + 1}`]: "#111111" })}>
+        <span>{strings.tokens.colors(Object.keys(colors).length)}</span>
+        <button className="icon-btn sm" aria-label={strings.tokens.addColor} title={strings.tokens.addColor} onClick={() => setColors({ ...colors, [strings.tokens.colorN(Object.keys(colors).length + 1)]: "#111111" })}>
           <Icon name="plus" size={14} />
         </button>
       </div>
       <ul className="tok-colors">
         {Object.entries(colors).map(([name, value]) => (
           <li key={name}>
-            <input type="color" value={toHex(value)?.toLowerCase() ?? "#000000"} aria-label={`${name} 색`} onChange={(e) => setColors({ ...colors, [name]: e.target.value.toUpperCase() })} />
+            <input type="color" value={toHex(value)?.toLowerCase() ?? "#000000"} aria-label={strings.tokens.colorOf(name)} onChange={(e) => setColors({ ...colors, [name]: e.target.value.toUpperCase() })} />
             <input
               defaultValue={name}
-              aria-label="색 이름"
+              aria-label={strings.tokens.colorName}
               onBlur={(e) => {
                 const n = e.target.value.trim();
                 if (!n || n === name || colors[n]) return;
@@ -222,25 +223,25 @@ export function TokenPanel({ tokens, onSave }: { tokens: Tokens; onSave: (t: Tok
               }}
             />
             <code>{value}</code>
-            <button className="icon-btn sm danger" aria-label={`${name} 빼기`} onClick={() => setColors(Object.fromEntries(Object.entries(colors).filter(([k]) => k !== name)))}>
+            <button className="icon-btn sm danger" aria-label={strings.tokens.remove(name)} onClick={() => setColors(Object.fromEntries(Object.entries(colors).filter(([k]) => k !== name)))}>
               <Icon name="close" size={12} />
             </button>
           </li>
         ))}
       </ul>
-      {list("fontSizes", "글자 크기")}
-      {list("fontWeights", "굵기")}
-      {list("radii", "모서리")}
-      {list("spacing", "간격")}
+      {list("fontSizes", strings.tokens.fontSizes)}
+      {list("fontWeights", strings.tokens.fontWeights)}
+      {list("radii", strings.tokens.radii)}
+      {list("spacing", strings.tokens.spacing)}
       <label className="field-row tok-list">
-        <span>누르는 영역</span>
-        <input type="number" value={t.minTarget} onChange={(e) => setT({ ...t, minTarget: Number(e.target.value) || 48 })} aria-label="최소 누르는 영역" />
+        <span>{strings.tokens.touchTarget}</span>
+        <input type="number" value={t.minTarget} onChange={(e) => setT({ ...t, minTarget: Number(e.target.value) || 48 })} aria-label={strings.tokens.minTouchTarget} />
       </label>
-      <button className="primary" disabled={!dirty} title="docs/design/tokens.json에 저장" onClick={() => onSave(t, tokens.registered ? "토큰 저장" : "토큰 등록")}>
-        {tokens.registered ? "저장" : "토큰 등록"}
+      <button className="primary" disabled={!dirty} title={strings.tokens.saveTitle} onClick={() => onSave(t, tokens.registered ? strings.history.saveTokens : strings.history.registerTokens)}>
+        {tokens.registered ? strings.tokens.save : strings.tokens.register}
       </button>
       <p className="muted small">
-        {tokens.registered ? "속성 패널 스와치·토큰 검사·AI(get_tokens)가 고른 테마 값을 써요." : "지금은 docs/design/README.md 표의 기본값이에요. 등록하면 tokens.json으로 저장돼요."}
+        {tokens.registered ? strings.tokens.registeredHint : strings.tokens.defaultHint}
       </p>
     </div>
   );
@@ -260,8 +261,8 @@ export function importTokens(j: unknown, base: Tokens): Tokens {
     }
   };
   walk(j, "");
-  if (!Object.keys(colors).length) throw new Error("색 값을 찾지 못했어요");
-  return { ...base, themes: { ...base.themes, 가져온: colors }, active: "가져온" };
+  if (!Object.keys(colors).length) throw new Error(strings.tokens.noColors);
+  return { ...base, themes: { ...base.themes, [strings.tokens.importedTheme]: colors }, active: strings.tokens.importedTheme };
 }
 
 /* ---------- 오른쪽: 검사 결과 목록(토큰·접근성) ---------- */
@@ -274,12 +275,12 @@ export function CheckList({ title, items, empty, onPick, onAskAI }: { title: str
         </span>
         {onAskAI && items && items.length > 0 && (
           <button className="link" onClick={onAskAI}>
-            AI에게 고쳐 달라기
+            {strings.checks.askFix}
           </button>
         )}
       </div>
       {items == null ? (
-        <p className="muted small">보드를 화면에 보이게 하면 검사해요.</p>
+        <p className="muted small">{strings.checks.notVisible}</p>
       ) : items.length === 0 ? (
         <p className="ok-line">
           <Icon name="check" size={14} /> {empty}
@@ -288,14 +289,14 @@ export function CheckList({ title, items, empty, onPick, onAskAI }: { title: str
         <ul className="check-list">
           {items.slice(0, 30).map((it, i) => (
             <li key={i}>
-              <button className="check-item" disabled={!it.path} onClick={() => it.path && onPick(it.path)} title={it.path ? `편집에서 ${it.path} 고르기` : `줄 ${it.line}`}>
+              <button className="check-item" disabled={!it.path} onClick={() => it.path && onPick(it.path)} title={it.path ? strings.checks.pickInEdit(it.path) : strings.checks.line(it.line)}>
                 <Icon name="warn" size={12} />
                 <span>{it.message}</span>
-                <code>{it.path ?? `줄 ${it.line}`}</code>
+                <code>{it.path ?? strings.checks.line(it.line)}</code>
               </button>
             </li>
           ))}
-          {items.length > 30 && <li className="muted small">외 {items.length - 30}개</li>}
+          {items.length > 30 && <li className="muted small">{strings.checks.more(items.length - 30)}</li>}
         </ul>
       )}
     </section>
@@ -378,13 +379,13 @@ export function TweaksPanel({ doc, onSave }: { doc: Document | null; onSave: (va
             if (doc) for (const [k, t] of Object.entries(o)) applyTweak(doc, k, t);
           }}
         >
-          되돌리기
+          {strings.tweaks.revert}
         </button>
         <button className="primary" disabled={!dirty} onClick={() => void onSave(Object.fromEntries(Object.entries(tw).map(([k, t]) => [k, t.value]))).then(() => setOrig(JSON.stringify(tw)))}>
-          원본에 저장
+          {strings.tweaks.save}
         </button>
       </div>
-      <p className="muted small">CSS 변수로 바로 적용돼요. 저장하면 board-tweaks JSON의 value만 바뀌어요.</p>
+      <p className="muted small">{strings.tweaks.hint}</p>
     </section>
   );
 }

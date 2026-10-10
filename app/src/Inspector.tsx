@@ -5,6 +5,7 @@ import { Children, useState, type ReactNode } from "react";
 import { api } from "./api";
 import { describe } from "./editor";
 import type { Selection } from "./types";
+import { strings } from "./strings";
 
 export type Reply = { id: string; author: string; text: string; createdAt: string };
 export type Comment = { id: string; file: string; path: string; text: string; author: string; createdAt: string; resolved: boolean; replies?: Reply[] };
@@ -51,7 +52,7 @@ export function Inspector(props: {
       const r = await api.post<{ path: string }>("/api/screenshot", { file: props.file, path: sel?.path });
       setShot(r.path);
     } catch (e) {
-      setShot(`실패: ${(e as Error).message}`);
+      setShot(strings.inspector.shotFailed((e as Error).message));
     } finally {
       setBusy(false);
     }
@@ -67,11 +68,11 @@ export function Inspector(props: {
       {!props.file ? (
         Children.toArray(props.children).length ? props.children : (
           <div className="inspector-empty">
-            <p className="muted">보드를 고르면 옵션이 여기 나와요.</p>
+            <p className="muted">{strings.inspector.pickBoard}</p>
             <ul className="muted">
-              <li><kbd>B</kbd> 보드 그리기 · <kbd>T</kbd> 제목 · <kbd>N</kbd> 메모</li>
-              <li>더블클릭 또는 <kbd>E</kbd> 편집 · <kbd>F</kbd> 전체 화면</li>
-              <li>우클릭으로 메뉴 · <kbd>⌘K</kbd> 보드 찾기</li>
+              <li><kbd>B</kbd> {strings.inspector.hintDraw} · <kbd>T</kbd> {strings.inspector.hintTitle} · <kbd>N</kbd> {strings.inspector.hintNote}</li>
+              <li>{strings.inspector.hintDoubleClick} <kbd>E</kbd> {strings.inspector.hintEdit} · <kbd>F</kbd> {strings.inspector.hintFocus}</li>
+              <li>{strings.inspector.hintRightClick} · <kbd>⌘K</kbd> {strings.inspector.hintFind}</li>
             </ul>
           </div>
         )
@@ -79,19 +80,19 @@ export function Inspector(props: {
         <>
           <section>
             <h3>{props.file}</h3>
-            <p className="muted">{props.editing ? "편집 모드 · 클릭으로 선택, Shift로 여러 개, Esc로 상위" : "보기 모드 · 더블클릭하면 편집"}</p>
+            <p className="muted">{props.editing ? strings.inspector.editModeHint : strings.inspector.viewModeHint}</p>
             {props.error && <p className="warn">{props.error}</p>}
             {sel && sel.file === props.file && (
               <div className="sel">
                 <div>
-                  <code>&lt;{sel.tag}&gt;</code> <code>{sel.path}</code> {props.multi > 1 && <span className="muted">외 {props.multi - 1}개</span>}
+                  <code>&lt;{sel.tag}&gt;</code> <code>{sel.path}</code> {props.multi > 1 && <span className="muted">{strings.inspector.more(props.multi - 1)}</span>}
                 </div>
                 {sel.text && <div className="sel-text">“{sel.text.slice(0, 120)}”</div>}
                 <div className="row">
-                  <button onClick={copy}>{copied ? "복사됨" : "복사"}</button>
-                  {sel.path.includes("/") && <button onClick={() => props.onSelectPath(sel.path.slice(0, sel.path.lastIndexOf("/")))}>상위</button>}
+                  <button onClick={copy}>{copied ? strings.inspector.copied : strings.inspector.copy}</button>
+                  {sel.path.includes("/") && <button onClick={() => props.onSelectPath(sel.path.slice(0, sel.path.lastIndexOf("/")))}>{strings.inspector.parent}</button>}
                   <button onClick={takeShot} disabled={busy}>
-                    {busy ? "찍는 중…" : "스크린샷"}
+                    {busy ? strings.inspector.capturing : strings.inspector.screenshot}
                   </button>
                 </div>
               </div>
@@ -99,7 +100,7 @@ export function Inspector(props: {
             {!sel && (
               <div className="row">
                 <button onClick={takeShot} disabled={busy}>
-                  {busy ? "찍는 중…" : "보드 스크린샷"}
+                  {busy ? strings.inspector.capturing : strings.inspector.boardScreenshot}
                 </button>
               </div>
             )}
@@ -107,10 +108,10 @@ export function Inspector(props: {
           </section>
           {props.children}
           <section>
-            <h3>댓글 {list.filter((c) => !c.resolved).length > 0 && <span className="muted">{list.filter((c) => !c.resolved).length}</span>}</h3>
+            <h3>{strings.comments.title} {list.filter((c) => !c.resolved).length > 0 && <span className="muted">{list.filter((c) => !c.resolved).length}</span>}</h3>
             <textarea
               value={text}
-              placeholder={sel?.file === props.file ? `선택한 요소(${sel.path})에 댓글` : "보드에 댓글"}
+              placeholder={sel?.file === props.file ? strings.comments.placeholderElement(sel.path) : strings.comments.placeholderBoard}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void addComment();
@@ -118,10 +119,10 @@ export function Inspector(props: {
             />
             <div className="row">
               <button onClick={addComment} disabled={!text.trim()}>
-                댓글 달기
+                {strings.comments.add}
               </button>
-              <button className="link" onClick={props.onAuthor} title="댓글 작성자 이름 바꾸기">
-                작성자: {props.author}
+              <button className="link" onClick={props.onAuthor} title={strings.comments.authorTitle}>
+                {strings.comments.author(props.author)}
               </button>
             </div>
             <ul className="comments">
@@ -155,8 +156,8 @@ export function Inspector(props: {
                       <textarea
                         autoFocus
                         value={reply}
-                        placeholder={`${props.author}(으)로 답글 (⌘Enter)`}
-                        aria-label="답글"
+                        placeholder={strings.comments.replyPlaceholder(props.author)}
+                        aria-label={strings.comments.reply}
                         onChange={(e) => setReply(e.target.value)}
                         onKeyDown={(e) => {
                           if (e.nativeEvent.isComposing) return;
@@ -166,10 +167,10 @@ export function Inspector(props: {
                       />
                       <div className="row">
                         <button onClick={() => void sendReply(c.id)} disabled={!reply.trim()}>
-                          답글
+                          {strings.comments.reply}
                         </button>
                         <button onClick={() => void sendReply(c.id, true)} disabled={!reply.trim()}>
-                          답하고 해결
+                          {strings.comments.replyResolve}
                         </button>
                       </div>
                     </div>
@@ -177,15 +178,15 @@ export function Inspector(props: {
                   <div className="row">
                     {replyTo !== c.id && (
                       <button className="link" onClick={() => setReplyTo(c.id)}>
-                        답글
+                        {strings.comments.reply}
                       </button>
                     )}
                     <button className="link" onClick={() => api.post("/api/comments", { action: "resolve", id: c.id, resolved: !c.resolved })}>
-                      {c.resolved ? "다시 열기" : "해결"}
+                      {c.resolved ? strings.comments.reopen : strings.comments.resolve}
                     </button>
                     {!c.resolved && props.onAskAI && (
-                      <button className="link" onClick={() => props.onAskAI!(c)} title="이 댓글 위치만 고쳐 달라고 AI에게 보내기">
-                        AI에게 보내기
+                      <button className="link" onClick={() => props.onAskAI!(c)} title={strings.comments.sendToAITitle}>
+                        {strings.comments.sendToAI}
                       </button>
                     )}
                   </div>

@@ -5,6 +5,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as RMouse
 import { stickyBg } from "./drawing";
 import { Icon } from "./icons";
 import type { Board, BoardItem, Note, Tool, View } from "./types";
+import { strings } from "./strings";
 
 // PLAN은 10%였지만 보드 98장 전체(높이 약 17,700)를 한 화면에 보이려고 4%까지 허용
 export const MIN_ZOOM = 0.04;
@@ -248,7 +249,7 @@ export function Canvas(p: Props) {
         p.onContext({ type: "canvas", x: Math.round(w.x), y: Math.round(w.y) }, e);
       }}
       role="application"
-      aria-label="디자인 캔버스"
+      aria-label={strings.canvas.aria}
     >
       <div className="world" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.zoom})` }}>
         {p.visibleNotes.map((id) => (
@@ -362,7 +363,7 @@ function BoardView(props: {
       style={{ left: b.x, top: b.y, width: b.w, height: b.h }}
       data-file={props.file}
       role="group"
-      aria-label={`보드 ${title}${props.selected ? " (선택됨)" : ""}${props.editing ? " 편집 중" : ""}${props.playing ? " 실행 중" : ""}`}
+      aria-label={strings.canvas.board(title, !!props.selected, !!props.editing, !!props.playing)}
     >
       <div
         className="board-label"
@@ -373,7 +374,7 @@ function BoardView(props: {
         onContextMenu={ctx}
         title={`${title} · ${props.file}`}
       >
-        {b.is_interactive && <span className="dot" aria-label="눌러 보는 보드" />}
+        {b.is_interactive && <span className="dot" aria-label={strings.canvas.interactive} />}
         <span
           className="board-title"
           onDoubleClick={(e) => {
@@ -391,7 +392,7 @@ function BoardView(props: {
                 <Icon name="play" size={14} />
               </button>
             )}
-            <button className={`icon-btn sm ${props.editing ? "on" : ""}`} aria-label="편집 모드" title="편집 (E · 더블클릭)" onPointerDown={stop} onClick={(e) => { e.stopPropagation(); props.onEdit(); }}>
+            <button className={`icon-btn sm ${props.editing ? "on" : ""}`} aria-label={strings.canvas.editMode} title={strings.canvas.editTitle} onPointerDown={stop} onClick={(e) => { e.stopPropagation(); props.onEdit(); }}>
               <Icon name="edit" size={14} />
             </button>
           </span>
@@ -415,7 +416,7 @@ function BoardView(props: {
         onContextMenu={(e) => !props.editing && !props.playing && ctx(e)}
       >
         {!props.exists ? (
-          <div className="board-missing">파일 없음 · {props.file}</div>
+          <div className="board-missing">{strings.canvas.fileMissing(props.file)}</div>
         ) : props.live ? (
           <LiveFrame reloadKey={props.reloadKey} iframeRef={props.iframeRef} src={`/screens/${props.file}`} title={title} editing={props.editing || !!props.playing} />
         ) : (
@@ -424,14 +425,14 @@ function BoardView(props: {
             <span>{title}</span>
           </div>
         )}
-        {props.playing && <div className="playing-badge" style={{ transform: `scale(${1 / Math.max(zoom, 0.25)})` }}>▶ 실행 중 · Esc</div>}
+        {props.playing && <div className="playing-badge" style={{ transform: `scale(${1 / Math.max(zoom, 0.25)})` }}>{strings.canvas.playing}</div>}
         {props.overlay}
       </div>
       {props.single && (
         <div
           className="board-resize"
           role="slider"
-          aria-label="보드 크기"
+          aria-label={strings.canvas.boardSize}
           aria-valuetext={`${b.w} × ${b.h}`}
           style={{ width: 12 / zoom, height: 12 / zoom, right: -6 / zoom, bottom: -6 / zoom, borderWidth: 1.5 / zoom }}
           onPointerDown={(e) => {
@@ -600,7 +601,7 @@ function NoteView(props: { note: Note; zoom: number; selected: boolean; onSelect
         <div
           className="note-resize"
           role="slider"
-          aria-label={n.kind === "title" ? "최대 너비" : "포스트잇 크기"}
+          aria-label={n.kind === "title" ? strings.canvas.titleMaxWidth : strings.canvas.stickySize}
           style={{ width: 12 / props.zoom, height: 12 / props.zoom, right: -6 / props.zoom, bottom: -6 / props.zoom, borderWidth: 1.5 / props.zoom }}
           onPointerDown={(e) => {
             if (e.button !== 0) return;
@@ -617,7 +618,7 @@ function NoteView(props: { note: Note; zoom: number; selected: boolean; onSelect
         />
       )}
       {props.selected && !editing && (
-        <button className="note-del icon-btn" aria-label="메모 삭제" style={{ transform: `scale(${1 / props.zoom})` }} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); props.onDelete(); }}>
+        <button className="note-del icon-btn" aria-label={strings.canvas.deleteNote} style={{ transform: `scale(${1 / props.zoom})` }} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); props.onDelete(); }}>
           <Icon name="close" size={14} />
         </button>
       )}

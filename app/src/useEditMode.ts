@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import { computedStyles, elementAt, pathOf, rectOf, type Rect } from "./editor";
 import type { Selection } from "./types";
+import { strings } from "./strings";
 
 export type EditState = {
   hover: { path: string; rect: Rect } | null;
@@ -28,7 +29,7 @@ export function useEditMode(editFile: string | null, getFrame: (f: string) => HT
     if (!doc) return;
     setState((s) => {
       const els = s.paths.map((p) => elementAt(doc, p));
-      if (els.some((e) => !e)) return { ...s, paths: [], rects: [], selection: null, error: "파일이 바뀜, 다시 선택" };
+      if (els.some((e) => !e)) return { ...s, paths: [], rects: [], selection: null, error: strings.editMode.fileChanged };
       return { ...s, rects: els.map((e) => rectOf(e!)) };
     });
   }, [editFile, getFrame]);

@@ -5,6 +5,7 @@ import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
 import type { Rect } from "./Canvas";
 import { Icon } from "./icons";
 import type { Board, BoardItem, Page, View } from "./types";
+import { strings } from "./strings";
 
 /* ---------------- 왼쪽 패널 ---------------- */
 export const LeftPanel = forwardRef<HTMLInputElement, {
@@ -35,19 +36,19 @@ export const LeftPanel = forwardRef<HTMLInputElement, {
     });
   }, [q, p.board, p.pages, p.currentPage, firstPage]);
   return (
-    <aside className="left" aria-label="페이지와 보드">
+    <aside className="left" aria-label={strings.boardList.aria}>
       {p.header}
       <section className="left-pages">
         <div className="sec-head">
-          <span>페이지</span>
-          <button className="icon-btn sm" aria-label="페이지 추가" title="페이지 추가" onClick={p.onAddPage}>
+          <span>{strings.boardList.pages}</span>
+          <button className="icon-btn sm" aria-label={strings.boardList.addPage} title={strings.boardList.addPage} onClick={p.onAddPage}>
             <Icon name="plus" size={14} />
           </button>
         </div>
         {p.pages.length === 0 ? (
-          <p className="empty">한 판으로 보고 있어요. + 로 페이지를 나눌 수 있어요.</p>
+          <p className="empty">{strings.boardList.singlePage}</p>
         ) : (
-          <ul role="tablist" aria-label="페이지">
+          <ul role="tablist" aria-label={strings.boardList.pages}>
             {p.pages.map((pg, i) => (
               <li
                 key={pg.id}
@@ -73,7 +74,7 @@ export const LeftPanel = forwardRef<HTMLInputElement, {
                   setOverPage(null);
                 }}
               >
-                <button role="tab" title="끌어서 순서 바꾸기 · 우클릭으로 이름·삭제" aria-selected={pg.id === p.currentPage} className={`row ${pg.id === p.currentPage ? "on" : ""} ${overPage === i && dragPage !== pg.id ? "drop-before" : ""}`} onClick={() => p.onPage(pg.id)} onContextMenu={(e) => { e.preventDefault(); p.onPageMenu(pg.id, e); }}>
+                <button role="tab" title={strings.boardList.pageTabTitle} aria-selected={pg.id === p.currentPage} className={`row ${pg.id === p.currentPage ? "on" : ""} ${overPage === i && dragPage !== pg.id ? "drop-before" : ""}`} onClick={() => p.onPage(pg.id)} onContextMenu={(e) => { e.preventDefault(); p.onPageMenu(pg.id, e); }}>
                   <Icon name="page" size={14} />
                   <span className="row-text">{pg.name}</span>
                   <span className="row-count">{Object.values(p.board.boards).filter((b) => (b.page ?? firstPage) === pg.id).length}</span>
@@ -85,11 +86,11 @@ export const LeftPanel = forwardRef<HTMLInputElement, {
       </section>
       <section className="left-boards">
         <div className="sec-head">
-          <span>보드 {list.length}</span>
+          <span>{strings.boardList.boards(list.length)}</span>
         </div>
         <label className="search">
           <Icon name="search" size={14} />
-          <input ref={searchRef} value={q} placeholder="보드 찾기 (⌘K)" aria-label="보드 찾기" onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => {
+          <input ref={searchRef} value={q} placeholder={strings.boardList.searchPlaceholder} aria-label={strings.boardList.search} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => {
             if (e.nativeEvent.isComposing) return;
             if (e.key === "Enter" && list[0]) p.onPick(list[0], false);
             if (e.key === "Escape") {
@@ -99,7 +100,7 @@ export const LeftPanel = forwardRef<HTMLInputElement, {
           }} />
         </label>
         {list.length === 0 ? (
-          <p className="empty">{q ? `"${q}"에 맞는 보드가 없어요` : "이 페이지에 보드가 없어요. 도구 막대의 보드(B)로 그려 보세요."}</p>
+          <p className="empty">{q ? strings.boardList.noMatch(q) : strings.boardList.emptyPage}</p>
         ) : (
           <ul className="board-list">
             {list.map((f) => {
@@ -109,7 +110,7 @@ export const LeftPanel = forwardRef<HTMLInputElement, {
                   <button className={`row ${p.selected.includes(f) ? "on" : ""}`} onClick={(e) => p.onPick(f, e.shiftKey || e.metaKey)} onContextMenu={(e) => { e.preventDefault(); p.onBoardMenu(f, e); }} title={f}>
                     <Icon name="board" size={14} />
                     <span className="row-text">{b.title ?? f}</span>
-                    {p.missing.includes(f) && <Icon name="warn" size={14} className="warn-icon" aria-label="파일 없음" />}
+                    {p.missing.includes(f) && <Icon name="warn" size={14} className="warn-icon" aria-label={strings.boardList.fileMissing} />}
                   </button>
                 </li>
               );
@@ -145,7 +146,7 @@ export function Minimap({ rects, selected, view, size, onJump }: { rects: (Rect 
     <div
       className="minimap"
       role="img"
-      aria-label="미니맵: 눌러서 그 자리로 이동"
+      aria-label={strings.minimap.aria}
       onPointerDown={(e) => {
         dragging.current = true;
         (e.currentTarget as Element).setPointerCapture(e.pointerId);
@@ -185,43 +186,43 @@ export function BoardOptions(p: {
     <NumField key={k + p.file + (b[k] ?? "")} label={label} value={b[k] ?? 0} min={min} max={max} onCommit={(v) => p.onPatch({ [k]: v })} />
   );
   return (
-    <section className="board-opts" aria-label="보드 옵션">
+    <section className="board-opts" aria-label={strings.boardOptions.aria}>
       <div className="sec-head">
-        <span>보드</span>
+        <span>{strings.boardOptions.heading}</span>
       </div>
-      <button className="title-btn" onClick={p.onRename} title="이름 바꾸기 (F2)">
+      <button className="title-btn" onClick={p.onRename} title={strings.boardOptions.renameTitle}>
         <strong>{b.title ?? p.file}</strong>
         <Icon name="edit" size={14} />
       </button>
-      <button className="link file-btn" onClick={p.onRenameFile} title="파일 이름 바꾸기">
+      <button className="link file-btn" onClick={p.onRenameFile} title={strings.boardOptions.renameFileTitle}>
         {p.file}
       </button>
       <div className="grid2">
         {num("x", "X")}
         {num("y", "Y")}
-        {num("w", "너비", 40, 8000)}
-        {num("h", "높이", 40, 8000)}
-        {num("radius", "모서리", 0, 200)}
+        {num("w", strings.boardOptions.width, 40, 8000)}
+        {num("h", strings.boardOptions.height, 40, 8000)}
+        {num("radius", strings.boardOptions.radius, 0, 200)}
       </div>
       <label className="check">
         <input type="checkbox" checked={!!b.is_interactive} onChange={(e) => p.onPatch({ is_interactive: e.target.checked || undefined })} />
-        눌러 보는 보드(Play)
+        {strings.boardOptions.interactive}
       </label>
       <label className="check">
         <input type="checkbox" checked={!!b.frameless} onChange={(e) => p.onPatch({ frameless: e.target.checked || undefined })} />
-        틀 없이
+        {strings.boardOptions.frameless}
       </label>
       <label className="check">
         <input type="checkbox" checked={b.expand === "fill"} onChange={(e) => p.onPatch({ expand: e.target.checked ? "fill" : undefined })} />
-        페이지형(전체 화면에서 창 채우기)
+        {strings.boardOptions.fill}
       </label>
       <label className="check">
         <input type="checkbox" checked={p.isLaunch} onChange={(e) => p.onLaunch(e.target.checked)} />
-        시작 화면으로 열기
+        {strings.boardOptions.launch}
       </label>
       {p.pages.length > 0 && (
         <label className="field-row">
-          <span>페이지</span>
+          <span>{strings.boardOptions.page}</span>
           <select value={b.page ?? p.pages[0].id} onChange={(e) => p.onPatch({ page: e.target.value })}>
             {p.pages.map((pg) => (
               <option key={pg.id} value={pg.id}>
@@ -232,11 +233,11 @@ export function BoardOptions(p: {
         </label>
       )}
       <div className="btn-row">
-        <button className="icon-btn" aria-label="전체 화면 보기" title="전체 화면 보기 (F)" onClick={p.onFocus}><Icon name="focus" /></button>
-        <button className="icon-btn" aria-label="맨 앞으로" title="맨 앞으로 (⌘])" onClick={p.onFront}><Icon name="front" /></button>
-        <button className="icon-btn" aria-label="맨 뒤로" title="맨 뒤로 (⌘[)" onClick={p.onBack}><Icon name="back" /></button>
-        <button className="icon-btn" aria-label="복제" title="복제 (⌘D)" onClick={p.onDuplicate}><Icon name="copy" /></button>
-        <button className="icon-btn danger" aria-label="삭제" title="삭제 (Delete)" onClick={p.onDelete}><Icon name="trash" /></button>
+        <button className="icon-btn" aria-label={strings.boardOptions.focus} title={strings.boardOptions.focusTitle} onClick={p.onFocus}><Icon name="focus" /></button>
+        <button className="icon-btn" aria-label={strings.boardOptions.front} title={strings.boardOptions.frontTitle} onClick={p.onFront}><Icon name="front" /></button>
+        <button className="icon-btn" aria-label={strings.boardOptions.back} title={strings.boardOptions.backTitle} onClick={p.onBack}><Icon name="back" /></button>
+        <button className="icon-btn" aria-label={strings.boardOptions.duplicate} title={strings.boardOptions.duplicateTitle} onClick={p.onDuplicate}><Icon name="copy" /></button>
+        <button className="icon-btn danger" aria-label={strings.boardOptions.delete} title={strings.boardOptions.deleteTitle} onClick={p.onDelete}><Icon name="trash" /></button>
       </div>
     </section>
   );
@@ -298,14 +299,14 @@ export function FocusView({ board, file, onClose, onNav }: { board: Board; file:
   if (!b) return null;
   const fill = b.expand === "fill";
   return (
-    <div className="focus" role="dialog" aria-modal="true" aria-label={`${b.title ?? file} 전체 화면`}>
+    <div className="focus" role="dialog" aria-modal="true" aria-label={strings.focus.aria(b.title ?? file)}>
       <div className="focus-bar">
-        <button className="icon-btn" aria-label="이전 보드" disabled={!list[i - 1]} onClick={() => onNav(list[i - 1])}><Icon name="chevronRight" style={{ transform: "rotate(180deg)" }} /></button>
-        <button className="icon-btn" aria-label="다음 보드" disabled={!list[i + 1]} onClick={() => onNav(list[i + 1])}><Icon name="chevronRight" /></button>
+        <button className="icon-btn" aria-label={strings.focus.prev} disabled={!list[i - 1]} onClick={() => onNav(list[i - 1])}><Icon name="chevronRight" style={{ transform: "rotate(180deg)" }} /></button>
+        <button className="icon-btn" aria-label={strings.focus.next} disabled={!list[i + 1]} onClick={() => onNav(list[i + 1])}><Icon name="chevronRight" /></button>
         <strong>{b.title ?? file}</strong>
-        <span className="muted">{file}{fill ? " · 페이지형" : ` · ${b.w}×${b.h} · ${Math.round(scale * 100)}%`}</span>
+        <span className="muted">{file}{fill ? strings.focus.pageStyle : ` · ${b.w}×${b.h} · ${Math.round(scale * 100)}%`}</span>
         <div className="spacer" />
-        <button onClick={onClose}>닫기 <kbd>Esc</kbd></button>
+        <button onClick={onClose}>{strings.focus.close} <kbd>Esc</kbd></button>
       </div>
       <div ref={ref} className={`focus-stage ${fill ? "fill" : ""}`}>
         {fill ? (

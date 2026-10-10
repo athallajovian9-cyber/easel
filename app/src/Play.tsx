@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { Board } from "./types";
+import { strings } from "./strings";
 
 export function Play({ board, file, onClose, onLocate }: { board: Board; file: string; onClose: () => void; onLocate: (f: string) => void }) {
   const ref = useRef<HTMLIFrameElement>(null);
@@ -36,10 +37,10 @@ export function Play({ board, file, onClose, onLocate }: { board: Board; file: s
   return (
     <div className="play" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="play-bar">
-        <button onClick={() => ref.current?.contentWindow?.history.back()} title="뒤로">
+        <button onClick={() => ref.current?.contentWindow?.history.back()} title={strings.play.back}>
           ←
         </button>
-        <button onClick={() => ref.current?.contentWindow?.history.forward()} title="앞으로">
+        <button onClick={() => ref.current?.contentWindow?.history.forward()} title={strings.play.forward}>
           →
         </button>
         <strong>{item?.title ?? current}</strong>
@@ -51,10 +52,10 @@ export function Play({ board, file, onClose, onLocate }: { board: Board; file: s
             onClose();
           }}
         >
-          캔버스에서 보기
+          {strings.play.viewOnCanvas}
         </button>
-        <button onClick={onClose} title="닫기(Esc)">
-          닫기
+        <button onClick={onClose} title={strings.play.closeTitle}>
+          {strings.play.close}
         </button>
       </div>
       <iframe

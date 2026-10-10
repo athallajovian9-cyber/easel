@@ -19,6 +19,7 @@ import { Properties } from "./Properties";
 import { ContextMenu, Dialog, useDialog, useToast, type MenuItem, type MenuState } from "./ui";
 import { useEditMode } from "./useEditMode";
 import type { Board, BoardItem, BoardResponse, LayoutGuide, Note, Shape, ShapeKind, Tool, View } from "./types";
+import { strings } from "./strings";
 
 const DRAFT_SAVE_DELAY = 400;
 const mod = navigator.platform.includes("Mac") ? "⌘" : "Ctrl+";
@@ -35,23 +36,23 @@ function loadSaved(title: string): Saved {
 
 type BoardError = { kind: string; message: string; line?: number };
 const TEMPLATES = [
-  { id: "blank", label: "빈 보드", size: "390×844", w: 390, h: 844 },
-  { id: "mobile", label: "모바일 화면", size: "390×844", w: 390, h: 844 },
-  { id: "desktop", label: "PC 화면", size: "1440×900", w: 1440, h: 900 },
-  { id: "doc", label: "문서·메모", size: "800×1000", w: 800, h: 1000 },
+  { id: "blank", label: strings.templates.blank, size: "390×844", w: 390, h: 844 },
+  { id: "mobile", label: strings.templates.mobile, size: "390×844", w: 390, h: 844 },
+  { id: "desktop", label: strings.templates.desktop, size: "1440×900", w: 1440, h: 900 },
+  { id: "doc", label: strings.templates.doc, size: "800×1000", w: 800, h: 1000 },
 ] as const;
 
 const TOOLS: { id: Tool; icon: IconName; label: string; key: string }[] = [
-  { id: "select", icon: "select", label: "선택", key: "V" },
-  { id: "hand", icon: "hand", label: "손(이동)", key: "H" },
-  { id: "board", icon: "board", label: "보드 그리기", key: "B" },
-  { id: "title", icon: "title", label: "제목", key: "T" },
-  { id: "sticky", icon: "sticky", label: "메모", key: "N" },
-  { id: "rect", icon: "rect", label: "사각형", key: "R" },
-  { id: "oval", icon: "oval", label: "타원", key: "O" },
-  { id: "line", icon: "line", label: "선", key: "L" },
-  { id: "arrow", icon: "arrow", label: "화살표", key: "A" },
-  { id: "pen", icon: "pen", label: "펜", key: "P" },
+  { id: "select", icon: "select", label: strings.tools.select, key: "V" },
+  { id: "hand", icon: "hand", label: strings.tools.hand, key: "H" },
+  { id: "board", icon: "board", label: strings.tools.board, key: "B" },
+  { id: "title", icon: "title", label: strings.tools.title, key: "T" },
+  { id: "sticky", icon: "sticky", label: strings.tools.sticky, key: "N" },
+  { id: "rect", icon: "rect", label: strings.tools.rect, key: "R" },
+  { id: "oval", icon: "oval", label: strings.tools.oval, key: "O" },
+  { id: "line", icon: "line", label: strings.tools.line, key: "L" },
+  { id: "arrow", icon: "arrow", label: strings.tools.arrow, key: "A" },
+  { id: "pen", icon: "pen", label: strings.tools.pen, key: "P" },
 ];
 const SHAPE_TOOLS: Tool[] = ["rect", "oval", "line", "arrow", "pen"];
 type Theme = "system" | "light" | "dark";
@@ -199,7 +200,7 @@ export function App() {
         savingRef.current++;
         return api
           .saveBoard(boardRef.current!, label === "draft" ? undefined : label)
-          .catch((e) => toast({ tone: "error", text: `저장 실패: ${e.message}` }))
+          .catch((e) => toast({ tone: "error", text: strings.toast.saveFailed(e.message) }))
           .finally(() => savingRef.current--);
       };
       if (label === "draft")
@@ -216,8 +217,8 @@ export function App() {
     async (dir: "undo" | "redo") => {
       try {
         const r = await api.post<{ label: string | null }>(`/api/history/${dir}`, {});
-        if (r.label) toast({ text: `${dir === "undo" ? "실행 취소" : "다시 실행"}: ${r.label}` });
-        else toast({ text: dir === "undo" ? "되돌릴 작업이 없어요" : "다시 할 작업이 없어요" });
+        if (r.label) toast({ text: strings.toast.undoRedoDone(dir, r.label) });
+        else toast({ text: dir === "undo" ? strings.toast.nothingToUndo : strings.toast.nothingToRedo });
         await load();
       } catch (e) {
         toast({ tone: "error", text: String((e as Error).message) });
@@ -226,7 +227,7 @@ export function App() {
     },
     [toast, load, loadHistory],
   );
-  const undoAction = { label: "실행 취소", run: () => void undoRedo("undo") };
+  const undoAction = { label: strings.toast.undoAction, run: () => void undoRedo("undo") };
 
   /* ---------- HTML 편집 ---------- */
   const doEdit = useCallback(
@@ -247,7 +248,7 @@ export function App() {
   const onTextEdit = useCallback(
     (el: HTMLElement, path: string) => {
       if (Array.from(el.children).some((c) => c.tagName !== "BR")) {
-        editRef.current?.setError("글자(와 줄바꿈)만 있는 요소만 바로 고칠 수 있어요");
+        editRef.current?.setError(strings.toast.textOnly);
         return;
       }
       const before = el.innerText ?? "";
@@ -312,7 +313,7 @@ export function App() {
     const hash = await hashOf(editFile, path);
     if (!(await doEdit({ op: "move", path, hash, ...plan }))) return;
     void editRef.current?.select([movedPath(path, plan.toParentPath, plan.index)]);
-    toast({ text: plan.freeze.length ? "옮겼어요 (원래 자리 크기를 고정)" : "옮겼어요", action: undoAction });
+    toast({ text: plan.freeze.length ? strings.toast.movedFrozen : strings.toast.moved, action: undoAction });
   };
   /** ⌘C: 요소 소스를 앱 클립보드(다른 보드에서도)와 시스템 클립보드에 */
   const copyElement = async () => {
@@ -325,7 +326,7 @@ export function App() {
       /* 무시 */
     }
     await navigator.clipboard?.writeText(source).catch(() => {});
-    toast({ tone: "ok", text: `<${sel.tag}> 복사 — 다른 보드에서 편집 중 ${mod}V로 붙여요` });
+    toast({ tone: "ok", text: strings.toast.copiedElement(sel.tag, mod) });
   };
   /** ⌘V: 고른 요소 뒤(없으면 본문 끝)에 붙인다 */
   const pasteElement = async () => {
@@ -336,11 +337,11 @@ export function App() {
     } catch {
       clip = null;
     }
-    if (!clip) return toast({ text: "복사한 요소가 없어요. 편집 중 요소를 고르고 ⌘C" });
+    if (!clip) return toast({ text: strings.toast.nothingCopied });
     const sel = edit.state.selection;
     const path = sel?.file === editFile ? sel.path : "";
     if (await doEdit({ op: "insert", path, hash: path ? sel!.hash : undefined, position: "after", html: clip.source })) {
-      toast({ tone: "ok", text: `${clip.file}의 <${clip.tag}>를 붙였어요`, action: undoAction });
+      toast({ tone: "ok", text: strings.toast.pasted(clip.file, clip.tag), action: undoAction });
       if (path) {
         const parts = path.split("/");
         parts[parts.length - 1] = String(Number(parts[parts.length - 1]) + 1);
@@ -354,7 +355,7 @@ export function App() {
       if (!editFile) return;
       const hash = await hashOf(editFile, path);
       const ok = isImg ? await doEdit({ op: "setAttr", path, hash, name: "src", value: a.ref }) : await doEdit({ op: "setStyle", path, hash, prop: "background-image", value: `url("${a.ref}")` });
-      if (ok) toast({ tone: "ok", text: `이미지를 ${a.name}로 바꿨어요`, action: undoAction });
+      if (ok) toast({ tone: "ok", text: strings.toast.imageReplaced(a.name), action: undoAction });
     });
 
   const onElementContext = useCallback((path: string, at: { clientX: number; clientY: number }) => elementMenuRef.current?.(path, at), []);
@@ -481,18 +482,18 @@ export function App() {
       await load();
       setSelected([file]);
       setTool("select");
-      toast({ tone: "ok", text: `보드 ${file}를 만들었어요`, action: undoAction });
+      toast({ tone: "ok", text: strings.toast.boardCreated(file), action: undoAction });
     } catch (e) {
-      toast({ tone: "error", text: `보드를 만들지 못했어요: ${(e as Error).message}` });
+      toast({ tone: "error", text: strings.toast.boardCreateFailed((e as Error).message) });
     }
   };
   const deleteBoards = async (files: string[]) => {
     if (!files.length || !board) return;
     const names = files.map((f) => board.boards[f]?.title ?? f);
     const ok = await ask.confirm({
-      title: files.length > 1 ? `보드 ${files.length}개를 지울까요?` : `"${names[0]}" 보드를 지울까요?`,
-      body: "HTML 파일도 함께 지워져요. 휴지통(docs/design/.trash)에 사본이 남고, 바로 실행 취소(⌘Z)로 되살릴 수 있어요.",
-      ok: "지우기",
+      title: strings.dialog.deleteBoardsTitle(files.length, names[0]),
+      body: strings.dialog.deleteBoardsBody,
+      ok: strings.dialog.delete,
       danger: true,
     });
     if (!ok) return;
@@ -501,7 +502,7 @@ export function App() {
       if (editFile && files.includes(editFile)) setEditFile(null);
       setSelected([]);
       await load();
-      toast({ text: `보드 ${files.length}개를 지웠어요`, action: undoAction });
+      toast({ text: strings.toast.boardsDeleted(files.length), action: undoAction });
     } catch (e) {
       toast({ tone: "error", text: String((e as Error).message) });
     }
@@ -511,7 +512,7 @@ export function App() {
       const r = await api.post<{ file: string }>("/api/boards/duplicate", { file });
       await load();
       setSelected([r.file]);
-      toast({ tone: "ok", text: `${r.file}로 복제했어요`, action: undoAction });
+      toast({ tone: "ok", text: strings.toast.duplicated(r.file), action: undoAction });
     } catch (e) {
       toast({ tone: "error", text: String((e as Error).message) });
     }
@@ -519,12 +520,12 @@ export function App() {
   const renameBoard = async (file: string) => {
     const b = boardRef.current?.boards[file];
     if (!b) return;
-    const r = await ask.prompt({ title: "보드 이름 바꾸기", label: "이름", value: b.title ?? file.replace(/\.html$/, ""), ok: "바꾸기" });
+    const r = await ask.prompt({ title: strings.dialog.renameBoardTitle, label: strings.dialog.name, value: b.title ?? file.replace(/\.html$/, ""), ok: strings.dialog.rename });
     if (!r || r.value.trim() === (b.title ?? "")) return;
     try {
       await api.post("/api/boards/rename", { file, title: r.value.trim() });
       await load();
-      toast({ tone: "ok", text: "이름을 바꿨어요", action: undoAction });
+      toast({ tone: "ok", text: strings.toast.renamed, action: undoAction });
     } catch (e) {
       toast({ tone: "error", text: String((e as Error).message) });
     }
@@ -532,12 +533,12 @@ export function App() {
   const renameFile = async (file: string) => {
     const { refs } = await api.get<{ refs: { file: string; count: number }[] }>(`/api/boards/refs?file=${encodeURIComponent(file)}`).catch(() => ({ refs: [] }));
     const r = await ask.prompt({
-      title: "파일 이름 바꾸기",
-      label: "파일 이름",
+      title: strings.dialog.renameFileTitle,
+      label: strings.dialog.fileName,
       value: file,
-      hint: refs.length ? `이 파일을 링크·iframe으로 가리키는 곳: ${refs.map((x) => x.file).join(", ")}` : "이 파일을 가리키는 링크·iframe은 없어요.",
-      ok: "바꾸기",
-      extra: refs.length ? { label: `참조 ${refs.reduce((a, x) => a + (x.count ?? 1), 0)}곳도 새 이름으로 바꾸기`, checked: true } : undefined,
+      hint: refs.length ? strings.dialog.renameFileRefs(refs.map((x) => x.file).join(", ")) : strings.dialog.renameFileNoRefs,
+      ok: strings.dialog.rename,
+      extra: refs.length ? { label: strings.dialog.renameFileExtra(refs.reduce((a, x) => a + (x.count ?? 1), 0)), checked: true } : undefined,
     });
     if (!r) return;
     let newFile = r.value.trim();
@@ -548,7 +549,7 @@ export function App() {
       if (editFile === file) setEditFile(newFile);
       setSelected([newFile]);
       await load();
-      toast({ tone: "ok", text: `${newFile}로 바꿨어요${r.extra ? " (참조도 갱신)" : ""}`, action: undoAction });
+      toast({ tone: "ok", text: strings.toast.fileRenamed(newFile, !!r.extra), action: undoAction });
     } catch (e) {
       toast({ tone: "error", text: String((e as Error).message) });
     }
@@ -560,7 +561,7 @@ export function App() {
     void createBoard({ x: Math.round(cx - t.w / 2), y: Math.round(cy - t.h / 2), w: t.w, h: t.h }, t.id).then(() => setView(fitView([{ x: cx - t.w / 2, y: cy - t.h / 2, w: t.w, h: t.h }], size, 80)));
   };
   const templateMenu = (at: { clientX: number; clientY: number }) =>
-    setMenu({ x: at.clientX, y: at.clientY, title: "새 보드", items: TEMPLATES.map((t) => ({ label: `${t.label} · ${t.size}`, icon: t.id === "doc" ? ("page" as IconName) : ("board" as IconName), shortcut: t.id === "blank" ? "B로 그리기" : undefined, run: () => createFromTemplate(t) })) });
+    setMenu({ x: at.clientX, y: at.clientY, title: strings.menu.newBoard, items: TEMPLATES.map((t) => ({ label: `${t.label} · ${t.size}`, icon: t.id === "doc" ? ("page" as IconName) : ("board" as IconName), shortcut: t.id === "blank" ? strings.menu.drawWithB : undefined, run: () => createFromTemplate(t) })) });
   /** 채팅 열기(+ 보낼 말·첨부) */
   const openChat = (draft?: string, files?: string[]) => {
     setRightTab("chat");
@@ -570,7 +571,7 @@ export function App() {
   };
   const askFix = (files: string[]) =>
     openChat(
-      `오류를 고쳐 줘:\n${files.map((f) => `- ${f}: ${(errors[f] ?? [{ message: data?.missing.includes(f) ? "파일이 없어요" : "오류" }])[0].message}`).join("\n")}`,
+      strings.prompts.fixErrors(files.map((f) => `- ${f}: ${(errors[f] ?? [{ message: data?.missing.includes(f) ? strings.menu.fileMissing : strings.prompts.error }])[0].message}`).join("\n")),
       files.filter((f) => board?.boards[f]),
     );
 
@@ -580,8 +581,8 @@ export function App() {
       const rest = b.order.filter((f) => !files.includes(f));
       const moved = b.order.filter((f) => files.includes(f));
       return { ...b, order: to === "front" ? [...rest, ...moved] : [...moved, ...rest] };
-    }, to === "front" ? "맨 앞으로" : "맨 뒤로");
-  const patchBoard = (file: string, patch: Partial<BoardItem>, label = "보드 옵션") =>
+    }, to === "front" ? strings.history.front : strings.history.back);
+  const patchBoard = (file: string, patch: Partial<BoardItem>, label: string = strings.history.boardOptions) =>
     update((b) => {
       const it: BoardItem = { ...b.boards[file], ...patch };
       for (const k of Object.keys(it) as (keyof BoardItem)[]) if (it[k] === undefined) delete it[k];
@@ -590,7 +591,7 @@ export function App() {
   const nudge = (dx: number, dy: number) =>
     update(
       (b) => ({ ...b, boards: { ...b.boards, ...Object.fromEntries(selected.map((f) => [f, { ...b.boards[f], x: b.boards[f].x + dx, y: b.boards[f].y + dy }])) } }),
-      "보드 옮기기",
+      strings.history.moveBoard,
     );
 
   /* ---------- 메모 ---------- */
@@ -601,16 +602,16 @@ export function App() {
     return id;
   };
   const createNote = (kind: Note["kind"], at: { x: number; y: number }) => {
-    if (Object.keys(boardRef.current?.notes ?? {}).length >= MAX_NOTES) return toast({ tone: "error", text: `메모는 ${MAX_NOTES}개까지예요` });
+    if (Object.keys(boardRef.current?.notes ?? {}).length >= MAX_NOTES) return toast({ tone: "error", text: strings.toast.notesMax(MAX_NOTES) });
     const id = newNoteId();
     const x = Math.round(at.x);
     const y = Math.round(at.y);
     update(
       (b) => ({
         ...b,
-        notes: { ...b.notes, [id]: kind === "title" ? { kind, x, y, text: "새 제목", maxW: 2000, ...pageField() } : { kind, x, y, text: "메모", w: 400, ...pageField() } },
+        notes: { ...b.notes, [id]: kind === "title" ? { kind, x, y, text: strings.defaults.newTitle, maxW: 2000, ...pageField() } : { kind, x, y, text: strings.defaults.note, w: 400, ...pageField() } },
       }),
-      kind === "title" ? "제목 추가" : "메모 추가",
+      kind === "title" ? strings.history.addTitle : strings.history.addNote,
     );
     setSelectedNote(id);
     setSelected([]);
@@ -620,9 +621,9 @@ export function App() {
     update((b) => {
       const { [id]: _, ...rest } = b.notes;
       return { ...b, notes: rest };
-    }, "메모 삭제");
+    }, strings.history.deleteNote);
     setSelectedNote(null);
-    toast({ text: "메모를 지웠어요", action: undoAction });
+    toast({ text: strings.toast.noteDeleted, action: undoAction });
   };
 
   /* ---------- 페이지 ---------- */
@@ -632,7 +633,7 @@ export function App() {
     () => Object.keys(shapes).filter((id) => onPage(shapes[id])).sort((a, b) => (shapes[a].z ?? 0) - (shapes[b].z ?? 0) || (a < b ? -1 : 1)),
     [shapes, onPage],
   );
-  const addShape = (sh: Shape, label = "도형 추가") => {
+  const addShape = (sh: Shape, label: string = strings.history.addShape) => {
     let id = "";
     do id = `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
     while (boardRef.current?.shapes?.[id]);
@@ -649,13 +650,13 @@ export function App() {
     update((b) => {
       const { [id]: _, ...rest } = b.shapes ?? {};
       return { ...b, shapes: rest };
-    }, "도형 삭제");
+    }, strings.history.deleteShape);
     setSelectedShape(null);
-    toast({ text: "도형을 지웠어요", action: undoAction });
+    toast({ text: strings.toast.shapeDeleted, action: undoAction });
   };
   const shapeZ = (id: string, to: "front" | "back") => {
     const zs = Object.values(boardRef.current?.shapes ?? {}).map((x) => x.z ?? 0);
-    patchShape(id, { z: to === "front" ? Math.max(0, ...zs) + 1 : Math.min(0, ...zs) - 1 }, to === "front" ? "도형 맨 앞으로" : "도형 맨 뒤로");
+    patchShape(id, { z: to === "front" ? Math.max(0, ...zs) + 1 : Math.min(0, ...zs) - 1 }, to === "front" ? strings.history.shapeFront : strings.history.shapeBack);
   };
   /** 이미지 도형: 자산에서 고르거나 붙여넣은 그림 */
   const addImageShape = (a: { ref: string; url: string }, at?: { x: number; y: number }) => {
@@ -665,9 +666,9 @@ export function App() {
       const w = Math.round(img.naturalWidth * k) || 300;
       const h = Math.round(img.naturalHeight * k) || 200;
       const c = at ?? { x: (size.w / 2 - view.x) / view.zoom - w / 2, y: (size.h / 2 - view.y) / view.zoom - h / 2 };
-      addShape({ kind: "image", x: Math.round(c.x), y: Math.round(c.y), w, h, src: a.ref }, "이미지 추가");
+      addShape({ kind: "image", x: Math.round(c.x), y: Math.round(c.y), w, h, src: a.ref }, strings.history.addImage);
     };
-    img.onerror = () => toast({ tone: "error", text: "이미지를 읽지 못했어요" });
+    img.onerror = () => toast({ tone: "error", text: strings.toast.imageReadFailed });
     img.src = a.url;
   };
   // 캔버스에 이미지를 붙여넣으면 자산으로 올리고 이미지 도형으로
@@ -678,7 +679,7 @@ export function App() {
       if (!files.length) return;
       e.preventDefault();
       try {
-        const [a] = await uploadAssets(files.map((f) => (f.name ? f : new File([f], "붙여넣은-이미지.png", { type: f.type }))));
+        const [a] = await uploadAssets(files.map((f) => (f.name ? f : new File([f], strings.defaults.pastedImage, { type: f.type }))));
         addImageShape(a);
       } catch (err) {
         toast({ tone: "error", text: String((err as Error).message) });
@@ -708,7 +709,7 @@ export function App() {
           const [a] = await uploadAssets([f]);
           addImageShape(a, { x, y: at.y });
           x += 400;
-        } else toast({ tone: "error", text: `${f.name}: HTML이나 이미지만 가져올 수 있어요` });
+        } else toast({ tone: "error", text: strings.toast.importOnly(f.name) });
       } catch (e) {
         toast({ tone: "error", text: `${f.name}: ${(e as Error).message}` });
       }
@@ -716,7 +717,7 @@ export function App() {
     if (made.length) {
       await load();
       setLocate(made);
-      toast({ tone: "ok", text: `보드 ${made.length}개를 가져왔어요`, action: undoAction });
+      toast({ tone: "ok", text: strings.toast.imported(made.length), action: undoAction });
     }
   };
 
@@ -734,24 +735,24 @@ export function App() {
   };
 
   const addPage = async () => {
-    if (pages.length >= 40) return toast({ tone: "error", text: "페이지는 40개까지예요" });
-    const r = await ask.prompt({ title: "새 페이지", label: "이름", value: `페이지 ${Math.max(pages.length, 1) + 1}`, ok: "만들기" });
+    if (pages.length >= 40) return toast({ tone: "error", text: strings.toast.pagesMax });
+    const r = await ask.prompt({ title: strings.dialog.newPageTitle, label: strings.dialog.name, value: strings.dialog.newPageName(Math.max(pages.length, 1) + 1), ok: strings.dialog.create });
     if (!r?.value.trim()) return;
     const res = await pageApi({ action: "add", name: r.value.trim() });
     if (res?.id) setPage(res.id);
   };
   const renamePage = async (id: string) => {
     const p = pages.find((x) => x.id === id);
-    const r = await ask.prompt({ title: "페이지 이름 바꾸기", label: "이름", value: p?.name ?? "", ok: "바꾸기" });
+    const r = await ask.prompt({ title: strings.dialog.renamePageTitle, label: strings.dialog.name, value: p?.name ?? "", ok: strings.dialog.rename });
     if (!r?.value.trim() || r.value.trim() === p?.name) return;
     await pageApi({ action: "rename", id, name: r.value.trim() });
   };
   const deletePage = async (id: string) => {
     const p = pages.find((x) => x.id === id);
     const n = Object.values(board?.boards ?? {}).filter((b) => (b.page ?? pages[0]?.id) === id).length;
-    if (!(await ask.confirm({ title: `"${p?.name}" 페이지를 지울까요?`, body: `이 페이지의 보드 ${n}개와 메모는 지워지지 않고 첫 페이지로 옮겨져요. 실행 취소(⌘Z)로 되돌릴 수 있어요.`, ok: "지우기", danger: true }))) return;
+    if (!(await ask.confirm({ title: strings.dialog.deletePageTitle(p?.name ?? ""), body: strings.dialog.deletePageBody(n), ok: strings.dialog.delete, danger: true }))) return;
     if (currentPage === id) setPage(null);
-    await pageApi({ action: "delete", id }, "페이지를 지웠어요");
+    await pageApi({ action: "delete", id }, strings.toast.pageDeleted);
   };
   const movePage = (id: string, index: number) => void pageApi({ action: "move", id, index });
   const pageMenu = (id: string, at: { clientX: number; clientY: number }) => {
@@ -761,13 +762,13 @@ export function App() {
       y: at.clientY,
       title: pages[i]?.name,
       items: [
-        { label: "이름 바꾸기", icon: "edit", run: () => void renamePage(id) },
-        { label: "위로", icon: "chevronDown", disabled: i <= 0, run: () => movePage(id, i - 1) },
-        { label: "아래로", icon: "chevronDown", disabled: i >= pages.length - 1, run: () => movePage(id, i + 1) },
-        { label: board?.launch?.page === id ? "시작 페이지 해제" : "시작 페이지로", icon: "page", run: () => update((b) => ({ ...b, launch: { ...(b.launch ?? { view: "canvas" }), page: b.launch?.page === id ? undefined : id } }), "시작 페이지") },
-        ...(selected.length ? [{ label: `선택한 보드 ${selected.length}개를 이 페이지로`, icon: "page" as IconName, run: () => update((b) => ({ ...b, boards: { ...b.boards, ...Object.fromEntries(selected.map((f) => [f, { ...b.boards[f], page: id === pages[0]?.id ? undefined : id }])) } }), "페이지로 옮기기") }] : []),
+        { label: strings.menu.rename, icon: "edit", run: () => void renamePage(id) },
+        { label: strings.menu.moveUp, icon: "chevronDown", disabled: i <= 0, run: () => movePage(id, i - 1) },
+        { label: strings.menu.moveDown, icon: "chevronDown", disabled: i >= pages.length - 1, run: () => movePage(id, i + 1) },
+        { label: board?.launch?.page === id ? strings.menu.unsetLaunchPage : strings.menu.setLaunchPage, icon: "page", run: () => update((b) => ({ ...b, launch: { ...(b.launch ?? { view: "canvas" }), page: b.launch?.page === id ? undefined : id } }), strings.history.launchPage) },
+        ...(selected.length ? [{ label: strings.menu.moveSelectedToPage(selected.length), icon: "page" as IconName, run: () => update((b) => ({ ...b, boards: { ...b.boards, ...Object.fromEntries(selected.map((f) => [f, { ...b.boards[f], page: id === pages[0]?.id ? undefined : id }])) } }), strings.history.moveToPage) }] : []),
         "sep",
-        { label: "삭제", icon: "trash", danger: true, disabled: pages.length <= 1, run: () => void deletePage(id) },
+        { label: strings.menu.delete, icon: "trash", danger: true, disabled: pages.length <= 1, run: () => void deletePage(id) },
       ],
     });
   };
@@ -778,23 +779,23 @@ export function App() {
     const files = selected.includes(file) ? selected : [file];
     const many = files.length > 1;
     return [
-      { label: editFile === file ? "편집 끝내기" : "편집", icon: "edit", shortcut: "E", disabled: many, run: () => setEditFile(editFile === file ? null : file) },
-      { label: inlinePlay === file ? "Play 멈추기" : "그 자리에서 Play", icon: "play", shortcut: "P", disabled: many || !b?.is_interactive, run: () => (inlinePlay === file ? stopInline() : setInlinePlay(file)) },
-      { label: "전체 화면 Play", icon: "play", disabled: many || !b?.is_interactive, run: () => setPlayFile(file) },
-      { label: "AI 리뷰 요청", icon: "comment", run: () => openChat("이 화면을 리뷰해 줘: 접근성(누르는 영역 48·명암 4.5·라벨), 정보 위계, 토큰(get_tokens·check_tokens) 위반을 짚고 고칠 점을 우선순위로. 고치지는 말고 제안만.", files) },
-      { label: "전체 화면 보기", icon: "focus", shortcut: "F", disabled: many, run: () => setFocusFile(file) },
-      { label: "AI에게 묻기", icon: "comment", shortcut: `${mod}J`, run: () => openChat(undefined, files) },
-      ...(errors[file] || data?.missing.includes(file) ? [{ label: "AI에게 오류 고쳐 달라기", icon: "warn" as IconName, run: () => askFix([file]) }] : []),
-      { label: "이 보드로 이동", icon: "fit", shortcut: "⇧2", run: () => goTo(files) },
+      { label: editFile === file ? strings.menu.stopEditing : strings.menu.edit, icon: "edit", shortcut: "E", disabled: many, run: () => setEditFile(editFile === file ? null : file) },
+      { label: inlinePlay === file ? strings.menu.stopPlay : strings.menu.playInPlace, icon: "play", shortcut: "P", disabled: many || !b?.is_interactive, run: () => (inlinePlay === file ? stopInline() : setInlinePlay(file)) },
+      { label: strings.menu.playFullScreen, icon: "play", disabled: many || !b?.is_interactive, run: () => setPlayFile(file) },
+      { label: strings.menu.askReview, icon: "comment", run: () => openChat(strings.prompts.review, files) },
+      { label: strings.menu.focusView, icon: "focus", shortcut: "F", disabled: many, run: () => setFocusFile(file) },
+      { label: strings.menu.askAI, icon: "comment", shortcut: `${mod}J`, run: () => openChat(undefined, files) },
+      ...(errors[file] || data?.missing.includes(file) ? [{ label: strings.menu.askFixErrors, icon: "warn" as IconName, run: () => askFix([file]) }] : []),
+      { label: strings.menu.goToBoard, icon: "fit", shortcut: "⇧2", run: () => goTo(files) },
       "sep",
-      { label: "이름 바꾸기", icon: "title", shortcut: "F2", disabled: many, run: () => void renameBoard(file) },
-      { label: "파일 이름 바꾸기…", icon: "link", disabled: many, run: () => void renameFile(file) },
-      { label: "복제", icon: "copy", shortcut: `${mod}D`, disabled: many, run: () => void duplicateBoard(file) },
+      { label: strings.menu.rename, icon: "title", shortcut: "F2", disabled: many, run: () => void renameBoard(file) },
+      { label: strings.menu.renameFile, icon: "link", disabled: many, run: () => void renameFile(file) },
+      { label: strings.menu.duplicate, icon: "copy", shortcut: `${mod}D`, disabled: many, run: () => void duplicateBoard(file) },
       "sep",
-      { label: "맨 앞으로", icon: "front", shortcut: `${mod}]`, run: () => reorder(files, "front") },
-      { label: "맨 뒤로", icon: "back", shortcut: `${mod}[`, run: () => reorder(files, "back") },
+      { label: strings.menu.front, icon: "front", shortcut: `${mod}]`, run: () => reorder(files, "front") },
+      { label: strings.menu.back, icon: "back", shortcut: `${mod}[`, run: () => reorder(files, "back") },
       "sep",
-      { label: many ? `보드 ${files.length}개 삭제` : "삭제", icon: "trash", shortcut: "⌫", danger: true, run: () => void deleteBoards(files) },
+      { label: many ? strings.menu.deleteBoards(files.length) : strings.menu.delete, icon: "trash", shortcut: "⌫", danger: true, run: () => void deleteBoards(files) },
     ];
   };
   const onContext = (t: ContextTarget, at: { clientX: number; clientY: number }) => {
@@ -807,11 +808,11 @@ export function App() {
       setMenu({
         x: at.clientX,
         y: at.clientY,
-        title: board.notes[t.id]?.kind === "title" ? "제목" : "메모",
+        title: board.notes[t.id]?.kind === "title" ? strings.menu.title : strings.menu.note,
         items: [
-          { label: "앞에 복제", icon: "copy", shortcut: `${mod}D`, run: () => { const n = board.notes[t.id]; const id = newNoteId(); update((b) => ({ ...b, notes: { ...b.notes, [id]: { ...n, x: n.x + 40, y: n.y + 40 } } }), "메모 복제"); setSelectedNote(id); } },
+          { label: strings.menu.duplicateInFront, icon: "copy", shortcut: `${mod}D`, run: () => { const n = board.notes[t.id]; const id = newNoteId(); update((b) => ({ ...b, notes: { ...b.notes, [id]: { ...n, x: n.x + 40, y: n.y + 40 } } }), strings.history.duplicateNote); setSelectedNote(id); } },
           "sep",
-          { label: "삭제", icon: "trash", shortcut: "⌫", danger: true, run: () => deleteNote(t.id) },
+          { label: strings.menu.delete, icon: "trash", shortcut: "⌫", danger: true, run: () => deleteNote(t.id) },
         ],
       });
     } else {
@@ -819,17 +820,17 @@ export function App() {
         x: at.clientX,
         y: at.clientY,
         items: [
-          { label: "여기에 보드 만들기", icon: "board", shortcut: "B", run: () => void createBoard({ x: Math.round(t.x), y: Math.round(t.y), w: 390, h: 844 }) },
-          { label: "여기에 모바일 화면 틀", icon: "board", run: () => void createBoard({ x: Math.round(t.x), y: Math.round(t.y) }, "mobile") },
-          { label: "여기에 제목", icon: "title", shortcut: "T", run: () => createNote("title", t) },
-          { label: "여기에 메모", icon: "sticky", shortcut: "N", run: () => createNote("sticky", t) },
+          { label: strings.menu.newBoardHere, icon: "board", shortcut: "B", run: () => void createBoard({ x: Math.round(t.x), y: Math.round(t.y), w: 390, h: 844 }) },
+          { label: strings.menu.mobileFrameHere, icon: "board", run: () => void createBoard({ x: Math.round(t.x), y: Math.round(t.y) }, "mobile") },
+          { label: strings.menu.titleHere, icon: "title", shortcut: "T", run: () => createNote("title", t) },
+          { label: strings.menu.noteHere, icon: "sticky", shortcut: "N", run: () => createNote("sticky", t) },
           "sep",
-          { label: "이 페이지 모두 선택", icon: "select", shortcut: `${mod}A`, run: () => select(visibleBoards) },
-          { label: "전체 보기", icon: "fit", shortcut: "⇧1", run: fitAll },
-          { label: "100%로 보기", icon: "search", shortcut: `${mod}0`, run: () => zoomTo(1) },
+          { label: strings.menu.selectAll, icon: "select", shortcut: `${mod}A`, run: () => select(visibleBoards) },
+          { label: strings.menu.fitAll, icon: "fit", shortcut: "⇧1", run: fitAll },
+          { label: strings.menu.zoom100, icon: "search", shortcut: `${mod}0`, run: () => zoomTo(1) },
           "sep",
-          { label: "실행 취소", icon: "undo", shortcut: `${mod}Z`, disabled: !hist.canUndo, run: () => void undoRedo("undo") },
-          { label: "다시 실행", icon: "redo", shortcut: `⇧${mod}Z`, disabled: !hist.canRedo, run: () => void undoRedo("redo") },
+          { label: strings.menu.undo, icon: "undo", shortcut: `${mod}Z`, disabled: !hist.canUndo, run: () => void undoRedo("undo") },
+          { label: strings.menu.redo, icon: "redo", shortcut: `⇧${mod}Z`, disabled: !hist.canRedo, run: () => void undoRedo("redo") },
         ],
       });
     }
@@ -843,26 +844,26 @@ export function App() {
     setMenu({
       x: at.clientX,
       y: at.clientY,
-      title: el ? `<${el.tagName.toLowerCase()}>` : "요소",
+      title: el ? `<${el.tagName.toLowerCase()}>` : strings.menu.element,
       items: [
-        { label: "글자 고치기", icon: "edit", disabled: !el || el.children.length > 0, run: () => el && onTextEdit(el as HTMLElement, path) },
-        { label: "부모 선택", icon: "layers", shortcut: "Esc", disabled: up == null, run: () => up != null && void edit.select([up]) },
-        { label: "이 요소를 AI에게", icon: "comment", run: () => openChat() },
-        { label: "복사", icon: "copy", shortcut: `${mod}C`, run: () => void copyElement() },
-        { label: "뒤에 붙여넣기", icon: "copy", shortcut: `${mod}V`, run: () => void pasteElement() },
-        ...(el?.tagName === "IMG" ? [{ label: "이미지 바꾸기…", icon: "page" as IconName, run: () => replaceImage(path, true) }] : []),
-        { label: "AI용 설명 복사", icon: "copy", run: () => void navigator.clipboard.writeText(`${editFile} ${path} <${el?.tagName.toLowerCase()}> "${(el?.textContent ?? "").trim().slice(0, 60)}"`).then(() => toast({ tone: "ok", text: "복사했어요" })) },
+        { label: strings.menu.editText, icon: "edit", disabled: !el || el.children.length > 0, run: () => el && onTextEdit(el as HTMLElement, path) },
+        { label: strings.menu.selectParent, icon: "layers", shortcut: "Esc", disabled: up == null, run: () => up != null && void edit.select([up]) },
+        { label: strings.menu.elementToAI, icon: "comment", run: () => openChat() },
+        { label: strings.menu.copy, icon: "copy", shortcut: `${mod}C`, run: () => void copyElement() },
+        { label: strings.menu.pasteAfter, icon: "copy", shortcut: `${mod}V`, run: () => void pasteElement() },
+        ...(el?.tagName === "IMG" ? [{ label: strings.menu.replaceImage, icon: "page" as IconName, run: () => replaceImage(path, true) }] : []),
+        { label: strings.menu.copyForAI, icon: "copy", run: () => void navigator.clipboard.writeText(`${editFile} ${path} <${el?.tagName.toLowerCase()}> "${(el?.textContent ?? "").trim().slice(0, 60)}"`).then(() => toast({ tone: "ok", text: strings.toast.copied })) },
         "sep",
-        { label: "복제", icon: "copy", shortcut: `${mod}D`, run: async () => void doEdit({ op: "duplicate", path, hash: await getHash() }) },
+        { label: strings.menu.duplicate, icon: "copy", shortcut: `${mod}D`, run: async () => void doEdit({ op: "duplicate", path, hash: await getHash() }) },
         {
-          label: "삭제",
+          label: strings.menu.delete,
           icon: "trash",
           shortcut: "⌫",
           danger: true,
           run: async () => {
             if (await doEdit({ op: "delete", path, hash: await getHash() })) {
               void edit.select([]);
-              toast({ text: "요소를 지웠어요", action: undoAction });
+              toast({ text: strings.toast.elementDeleted, action: undoAction });
             }
           },
         },
@@ -926,7 +927,7 @@ export function App() {
     const hashes = await Promise.all(ordered.map((p) => hashOf(editFile, p)));
     if (await doEdit({ op: "wrap", paths: ordered, hashes, display })) {
       void edit.select([ordered[0]]);
-      toast({ tone: "ok", text: `${display}로 감쌌어요`, action: undoAction });
+      toast({ tone: "ok", text: strings.toast.wrapped(display), action: undoAction });
     }
   };
 
@@ -935,7 +936,7 @@ export function App() {
     try {
       await api.put("/api/tokens", { ...t, label });
       setTokensVersion((v) => v + 1);
-      toast({ tone: "ok", text: label === "테마 바꾸기" ? `테마: ${t.active}` : "토큰을 저장했어요", action: undoAction });
+      toast({ tone: "ok", text: label === strings.history.changeTheme ? strings.toast.theme(t.active) : strings.toast.tokensSaved, action: undoAction });
     } catch (e) {
       toast({ tone: "error", text: String((e as Error).message) });
     }
@@ -971,22 +972,22 @@ export function App() {
   }, [lintTarget, frameTick, reloadKeys[lintTarget ?? ""], tokens?.minTarget, view.zoom >= 0.25]);
   const snapshotMenu = async (at: { clientX: number; clientY: number }) => {
     const s = await api.get<{ git: boolean; branch?: string; changed: number; snapshots: { hash: string; author: string; when: string; subject: string }[] }>("/api/snapshots").catch(() => null);
-    if (!s?.git) return setMenu({ x: at.clientX, y: at.clientY, title: "스냅숏", items: [{ label: "디자인 폴더가 git 저장소 밖이에요", disabled: true, run: () => {} }] });
+    if (!s?.git) return setMenu({ x: at.clientX, y: at.clientY, title: strings.menu.snapshot, items: [{ label: strings.menu.notGit, disabled: true, run: () => {} }] });
     setMenu({
       x: at.clientX,
       y: at.clientY,
-      title: `스냅숏 · ${s.branch} · 바뀐 파일 ${s.changed}`,
+      title: strings.menu.snapshotStatus(s.branch ?? "", s.changed),
       items: [
         {
-          label: s.changed ? "지금 스냅숏 남기기(git 커밋)…" : "바뀐 것이 없어요",
+          label: s.changed ? strings.menu.snapshotNow : strings.menu.nothingChanged,
           icon: "check",
           disabled: !s.changed,
           run: async () => {
-            const r = await ask.prompt({ title: "스냅숏 남기기", label: "메시지", value: `docs(design): 디자인 스냅숏 ${new Date().toLocaleDateString("ko-KR")}`, hint: "디자인 폴더만 커밋해요. 작성자는 git 설정 그대로이고, 다른 스테이징은 섞이지 않아요.", ok: "커밋" });
+            const r = await ask.prompt({ title: strings.dialog.snapshotTitle, label: strings.dialog.snapshotLabel, value: strings.dialog.snapshotMessage(new Date().toLocaleDateString("en-CA")), hint: strings.dialog.snapshotHint, ok: strings.dialog.commit });
             if (!r) return;
             try {
               const res = await api.post<{ hash?: string; nothing?: boolean }>("/api/snapshot", { message: r.value });
-              toast({ tone: "ok", text: res.nothing ? "바뀐 것이 없어요" : `스냅숏 ${res.hash}` });
+              toast({ tone: "ok", text: res.nothing ? strings.toast.nothingChanged : strings.toast.snapshot(res.hash ?? "") });
             } catch (e) {
               toast({ tone: "error", text: String((e as Error).message) });
             }
@@ -1061,7 +1062,7 @@ export function App() {
       return run(() => {
         select([n]);
         goTo([n]);
-        setAnnounce(`${board.boards[n]?.title ?? n} 선택, ${visibleBoards.indexOf(n) + 1}/${visibleBoards.length}. Enter로 편집`);
+        setAnnounce(strings.app.announceBoard(board.boards[n]?.title ?? n, visibleBoards.indexOf(n) + 1, visibleBoards.length));
       });
     }
     if (e.key === "Enter" && !editFile && selected.length === 1 && inCanvas) return run(() => setEditFile(selected[0]));
@@ -1081,7 +1082,7 @@ export function App() {
         return run(async () => {
           if (await doEdit({ op: "delete", path: sel.path, hash: sel.hash })) {
             void edit.select([]);
-            toast({ text: "요소를 지웠어요", action: undoAction });
+            toast({ text: strings.toast.elementDeleted, action: undoAction });
           }
         });
       }
@@ -1114,9 +1115,9 @@ export function App() {
       const d = e.altKey ? 100 : e.shiftKey ? 10 : 1;
       const dx = e.key === "ArrowLeft" ? -d : e.key === "ArrowRight" ? d : 0;
       const dy = e.key === "ArrowUp" ? -d : e.key === "ArrowDown" ? d : 0;
-      if (selectedShape) return run(() => patchShape(selectedShape, { x: shapes[selectedShape].x + dx, y: shapes[selectedShape].y + dy }, "도형 옮기기"));
+      if (selectedShape) return run(() => patchShape(selectedShape, { x: shapes[selectedShape].x + dx, y: shapes[selectedShape].y + dy }, strings.history.moveShape));
       const n = board.notes[selectedNote!];
-      return run(() => update((b) => ({ ...b, notes: { ...b.notes, [selectedNote!]: { ...n, x: n.x + dx, y: n.y + dy } } }), "메모 옮기기"));
+      return run(() => update((b) => ({ ...b, notes: { ...b.notes, [selectedNote!]: { ...n, x: n.x + dx, y: n.y + dy } } }), strings.history.moveNote));
     }
     if (e.key.startsWith("Arrow") && selected.length && !editFile) {
       const d = e.altKey ? 100 : e.shiftKey ? 10 : 1;
@@ -1189,12 +1190,12 @@ export function App() {
       <div className="loading" role="status">
         {error ? (
           <>
-            <Icon name="warn" /> 불러오지 못했어요: {error}
-            <button onClick={() => void load()}>다시 시도</button>
+            <Icon name="warn" /> {strings.app.loadFailed} {error}
+            <button onClick={() => void load()}>{strings.app.retry}</button>
           </>
         ) : (
           <>
-            <span className="spinner" aria-hidden="true" /> 보드를 불러오는 중…
+            <span className="spinner" aria-hidden="true" /> {strings.app.loadingBoards}
           </>
         )}
       </div>
@@ -1207,15 +1208,15 @@ export function App() {
     return visibleBoards.filter((f) => { const b = board.boards[f]; return b.x < vx + vw && b.x + b.w > vx && b.y < vy + vh && b.y + b.h > vy; }).length;
   })();
   const leftTabs = (
-    <div className="left-tabs" role="tablist" aria-label="왼쪽 패널">
+    <div className="left-tabs" role="tablist" aria-label={strings.tabs.left}>
       <button role="tab" aria-selected={leftTab === "boards"} className={leftTab === "boards" ? "on" : ""} onClick={() => setLeftTab("boards")}>
-        보드
+        {strings.tabs.boards}
       </button>
       <button role="tab" aria-selected={leftTab === "assets"} className={leftTab === "assets" ? "on" : ""} onClick={() => setLeftTab("assets")}>
-        자산
+        {strings.tabs.assets}
       </button>
       <button role="tab" aria-selected={leftTab === "tokens"} className={leftTab === "tokens" ? "on" : ""} onClick={() => setLeftTab("tokens")}>
-        토큰
+        {strings.tabs.tokens}
       </button>
     </div>
   );
@@ -1223,82 +1224,82 @@ export function App() {
 
   return (
     <div className="app">
-      <header className="toolbar" role="toolbar" aria-label="도구">
-        <button className={`icon-btn ${leftOpen ? "on" : ""}`} aria-label="왼쪽 패널" aria-pressed={leftOpen} title={`왼쪽 패널 (${mod}\\)`} onClick={() => setLeftOpen((v) => !v)}>
+      <header className="toolbar" role="toolbar" aria-label={strings.toolbar.aria}>
+        <button className={`icon-btn ${leftOpen ? "on" : ""}`} aria-label={strings.toolbar.leftPanel} aria-pressed={leftOpen} title={strings.toolbar.leftPanelTitle(mod)} onClick={() => setLeftOpen((v) => !v)}>
           <Icon name="panel" style={{ transform: "scaleX(-1)" }} />
         </button>
         <strong className="app-title">{board.title}</strong>
-        <div className="tool-group" role="radiogroup" aria-label="캔버스 도구">
+        <div className="tool-group" role="radiogroup" aria-label={strings.toolbar.canvasTools}>
           {TOOLS.slice(0, 5).map((t) => (
-            <button key={t.id} role="radio" aria-checked={tool === t.id} aria-label={`${t.label} (${t.key})`} title={`${t.label} (${t.key})`} className={`icon-btn ${tool === t.id ? "on" : ""}`} disabled={!!editFile && t.id !== "select" && t.id !== "hand"} onClick={() => setTool(t.id)}>
+            <button key={t.id} role="radio" aria-checked={tool === t.id} aria-label={strings.toolbar.tool(t.label, t.key)} title={strings.toolbar.tool(t.label, t.key)} className={`icon-btn ${tool === t.id ? "on" : ""}`} disabled={!!editFile && t.id !== "select" && t.id !== "hand"} onClick={() => setTool(t.id)}>
               <Icon name={t.icon} />
             </button>
           ))}
         </div>
-        <div className="tool-group" role="radiogroup" aria-label="도형">
+        <div className="tool-group" role="radiogroup" aria-label={strings.toolbar.shapes}>
           {TOOLS.slice(5).map((t) => (
-            <button key={t.id} role="radio" aria-checked={tool === t.id} aria-label={`${t.label} (${t.key})`} title={`${t.label} (${t.key}) · Shift로 정사각·정원`} className={`icon-btn ${tool === t.id ? "on" : ""}`} disabled={!!editFile} onClick={() => setTool(t.id)}>
+            <button key={t.id} role="radio" aria-checked={tool === t.id} aria-label={strings.toolbar.tool(t.label, t.key)} title={strings.toolbar.shapeToolTitle(t.label, t.key)} className={`icon-btn ${tool === t.id ? "on" : ""}`} disabled={!!editFile} onClick={() => setTool(t.id)}>
               <Icon name={t.icon} />
             </button>
           ))}
-          <button className="icon-btn" aria-label="이미지 넣기" title="이미지 넣기(캔버스에 붙여넣기도 돼요)" disabled={!!editFile} onClick={() => setPicker(() => (a: Asset) => { setPicker(null); addImageShape(a); })}>
+          <button className="icon-btn" aria-label={strings.toolbar.insertImage} title={strings.toolbar.insertImageTitle} disabled={!!editFile} onClick={() => setPicker(() => (a: Asset) => { setPicker(null); addImageShape(a); })}>
             <Icon name="image" />
           </button>
         </div>
         <div className="tool-group">
-          <button className="icon-btn" aria-label="실행 취소" title={hist.undo.length ? `실행 취소: ${hist.undo[hist.undo.length - 1]} (${mod}Z)` : `실행 취소 (${mod}Z)`} disabled={!hist.canUndo} onClick={() => void undoRedo("undo")}>
+          <button className="icon-btn" aria-label={strings.toolbar.undo} title={strings.toolbar.undoTitle(hist.undo.length ? hist.undo[hist.undo.length - 1] : undefined, mod)} disabled={!hist.canUndo} onClick={() => void undoRedo("undo")}>
             <Icon name="undo" />
           </button>
-          <button className="icon-btn" aria-label="다시 실행" title={hist.redo.length ? `다시 실행: ${hist.redo[hist.redo.length - 1]} (⇧${mod}Z)` : `다시 실행 (⇧${mod}Z)`} disabled={!hist.canRedo} onClick={() => void undoRedo("redo")}>
+          <button className="icon-btn" aria-label={strings.toolbar.redo} title={strings.toolbar.redoTitle(hist.redo.length ? hist.redo[hist.redo.length - 1] : undefined, mod)} disabled={!hist.canRedo} onClick={() => void undoRedo("redo")}>
             <Icon name="redo" />
           </button>
         </div>
-        <button className="new-board" aria-haspopup="menu" title="새 보드(틀 고르기)" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); templateMenu({ clientX: r.left, clientY: r.bottom + 4 }); }}>
-          <Icon name="plus" size={16} /> 새 보드 <Icon name="chevronDown" size={14} />
+        <button className="new-board" aria-haspopup="menu" title={strings.toolbar.newBoardTitle} onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); templateMenu({ clientX: r.left, clientY: r.bottom + 4 }); }}>
+          <Icon name="plus" size={16} /> {strings.toolbar.newBoard} <Icon name="chevronDown" size={14} />
         </button>
         {editFile && (
           <span className="editing-chip">
-            <Icon name="edit" size={14} /> {board.boards[editFile]?.title ?? editFile} 편집 중
-            <button className="icon-btn sm" aria-label="편집 끝내기" title="편집 끝내기 (Esc)" onClick={() => setEditFile(null)}>
+            <Icon name="edit" size={14} /> {strings.toolbar.editing(board.boards[editFile]?.title ?? editFile)}
+            <button className="icon-btn sm" aria-label={strings.toolbar.stopEditing} title={strings.toolbar.stopEditingTitle} onClick={() => setEditFile(null)}>
               <Icon name="close" size={14} />
             </button>
           </span>
         )}
         <div className="spacer" />
         {tokens && Object.keys(tokens.themes).length > 0 && (
-          <label className="theme-pick" title="디자인 시스템 테마(스와치·토큰 검사·AI에 쓰임)">
-            <span className="sr-only">테마</span>
-            <select value={tokens.active} aria-label="테마" onChange={(e) => void saveTokens({ ...tokens, active: e.target.value }, "테마 바꾸기")}>
+          <label className="theme-pick" title={strings.toolbar.themeTitle}>
+            <span className="sr-only">{strings.toolbar.theme}</span>
+            <select value={tokens.active} aria-label={strings.toolbar.theme} onChange={(e) => void saveTokens({ ...tokens, active: e.target.value }, strings.history.changeTheme)}>
               {Object.keys(tokens.themes).map((n) => (
                 <option key={n} value={n}>
-                  테마: {n}
+                  {strings.toolbar.themeOption(n)}
                 </option>
               ))}
             </select>
           </label>
         )}
-        <button className="icon-btn" aria-label="스냅숏(git)" title="스냅숏: 디자인 폴더를 git 커밋으로 저장" aria-haspopup="menu" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); void snapshotMenu({ clientX: r.left, clientY: r.bottom + 4 }); }}>
+        <button className="icon-btn" aria-label={strings.toolbar.snapshot} title={strings.toolbar.snapshotTitle} aria-haspopup="menu" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); void snapshotMenu({ clientX: r.left, clientY: r.bottom + 4 }); }}>
           <Icon name="layers" />
         </button>
         {erroredFiles.length > 0 && (
           <button
             className="err-chip"
             aria-haspopup="menu"
-            title="오류 난 보드"
+            title={strings.toolbar.erroredBoards}
             onClick={(e) => {
               const r = e.currentTarget.getBoundingClientRect();
               setMenu({
                 x: r.left,
                 y: r.bottom + 4,
-                title: `오류 난 보드 ${erroredFiles.length}`,
+                title: strings.toolbar.erroredBoardsN(erroredFiles.length),
                 items: [
-                  ...erroredFiles.slice(0, 12).map((f) => ({ label: `${board.boards[f]?.title ?? f} — ${(errors[f]?.[0]?.message ?? "파일이 없어요").slice(0, 40)}`, icon: "warn" as IconName, run: () => { select([f]); goTo([f]); } })),
+                  ...erroredFiles.slice(0, 12).map((f) => ({ label: `${board.boards[f]?.title ?? f} — ${(errors[f]?.[0]?.message ?? strings.menu.fileMissing).slice(0, 40)}`, icon: "warn" as IconName, run: () => { select([f]); goTo([f]); } })),
                   "sep" as const,
-                  { label: "AI에게 모두 고쳐 달라기", icon: "comment" as IconName, run: () => askFix(erroredFiles) },
+                  { label: strings.menu.askFixAll, icon: "comment" as IconName, run: () => askFix(erroredFiles) },
                   ...(data.missing.length
                     ? [
                         {
-                          label: `파일 없는 보드 ${data.missing.length}개 정리`,
+                          label: strings.menu.cleanMissing(data.missing.length),
                           icon: "trash" as IconName,
                           danger: true,
                           run: () => {
@@ -1306,8 +1307,8 @@ export function App() {
                               const boards = { ...b.boards };
                               for (const f of data.missing) delete boards[f];
                               return { ...b, boards, order: b.order.filter((f) => !data.missing.includes(f)) };
-                            }, "파일 없는 보드 정리");
-                            toast({ text: `보드 ${data.missing.length}개를 정리했어요`, action: undoAction });
+                            }, strings.history.cleanMissing);
+                            toast({ text: strings.toast.cleanedUp(data.missing.length), action: undoAction });
                           },
                         },
                       ]
@@ -1316,38 +1317,38 @@ export function App() {
               });
             }}
           >
-            <Icon name="warn" size={14} /> 오류 {erroredFiles.length}
+            <Icon name="warn" size={14} /> {strings.toolbar.errors(erroredFiles.length)}
           </button>
         )}
         {error && <span className="warn">{error}</span>}
         <div className="tool-group">
-          <button className="icon-btn" aria-label="축소" title={`축소 (${mod}-)`} onClick={() => zoomBy(0.8)}>
+          <button className="icon-btn" aria-label={strings.toolbar.zoomOut} title={strings.toolbar.zoomOutTitle(mod)} onClick={() => zoomBy(0.8)}>
             <span className="glyph">−</span>
           </button>
-          <button className="zoom" aria-label="100%로 보기" title={`100%로 보기 (${mod}0)`} onClick={() => zoomTo(1)}>
+          <button className="zoom" aria-label={strings.toolbar.zoom100} title={strings.toolbar.zoom100Title(mod)} onClick={() => zoomTo(1)}>
             {Math.round(view.zoom * 100)}%
           </button>
-          <button className="icon-btn" aria-label="확대" title={`확대 (${mod}+)`} onClick={() => zoomBy(1.25)}>
+          <button className="icon-btn" aria-label={strings.toolbar.zoomIn} title={strings.toolbar.zoomInTitle(mod)} onClick={() => zoomBy(1.25)}>
             <Icon name="plus" />
           </button>
-          <button className="icon-btn" aria-label="전체 보기" title="전체 보기 (⇧1)" onClick={fitAll}>
+          <button className="icon-btn" aria-label={strings.toolbar.fitAll} title={strings.toolbar.fitAllTitle} onClick={fitAll}>
             <Icon name="fit" />
           </button>
-          <button className={`icon-btn ${rightTab === "chat" ? "on" : ""}`} aria-label="AI 채팅" aria-pressed={rightTab === "chat"} title={`AI 채팅 (${mod}J)`} onClick={() => (rightTab === "chat" ? setRightTab("inspect") : openChat())}>
+          <button className={`icon-btn ${rightTab === "chat" ? "on" : ""}`} aria-label={strings.toolbar.aiChat} aria-pressed={rightTab === "chat"} title={strings.toolbar.aiChatTitle(mod)} onClick={() => (rightTab === "chat" ? setRightTab("inspect") : openChat())}>
             <Icon name="comment" />
           </button>
-          <button className={`icon-btn ${guidesOn ? "on" : ""}`} aria-label="레이아웃 가이드 보기" aria-pressed={guidesOn} title="레이아웃 가이드 보기 (⌃G)" onClick={() => setGuidesOn((v) => !v)}>
+          <button className={`icon-btn ${guidesOn ? "on" : ""}`} aria-label={strings.toolbar.guides} aria-pressed={guidesOn} title={strings.toolbar.guidesTitle} onClick={() => setGuidesOn((v) => !v)}>
             <Icon name="grid" />
           </button>
           <button
             className="icon-btn"
-            aria-label={`화면 모드: ${theme === "system" ? "시스템" : theme === "light" ? "밝게" : "어둡게"}`}
-            title={`화면 모드: ${theme === "system" ? "시스템 따라" : theme === "light" ? "밝게" : "어둡게"} (누르면 바꿈)`}
+            aria-label={strings.toolbar.appearance(theme)}
+            title={strings.toolbar.appearanceTitle(theme)}
             onClick={() => setTheme((t) => (t === "system" ? "light" : t === "light" ? "dark" : "system"))}
           >
             <Icon name={theme === "system" ? "system" : theme === "light" ? "sun" : "moon"} />
           </button>
-          <button className={`icon-btn ${minimapOpen ? "on" : ""}`} aria-label="미니맵" aria-pressed={minimapOpen} title="미니맵 (M)" onClick={() => setMinimapOpen((v) => !v)}>
+          <button className={`icon-btn ${minimapOpen ? "on" : ""}`} aria-label={strings.toolbar.minimap} aria-pressed={minimapOpen} title={strings.toolbar.minimapTitle} onClick={() => setMinimapOpen((v) => !v)}>
             <Icon name="map" />
           </button>
         </div>
@@ -1355,14 +1356,14 @@ export function App() {
       <div className="main">
         {leftOpen && (
           leftTab === "tokens" ? (
-            <aside className="left" aria-label="디자인 토큰">
+            <aside className="left" aria-label={strings.app.tokensAside}>
               {leftTabs}
-              {tokens ? <TokenPanel tokens={tokens} onSave={(t, label) => void saveTokens(t, label)} /> : <p className="empty">불러오는 중…</p>}
+              {tokens ? <TokenPanel tokens={tokens} onSave={(t, label) => void saveTokens(t, label)} /> : <p className="empty">{strings.app.loading}</p>}
             </aside>
           ) : leftTab === "assets" ? (
-            <aside className="left" aria-label="자산">
+            <aside className="left" aria-label={strings.app.assetsAside}>
               {leftTabs}
-              <AssetGrid version={assetsVersion} onError={(m) => toast({ tone: "error", text: m })} onUploaded={(a) => toast({ tone: "ok", text: `${a.map((x) => x.name).join(", ")}를 올렸어요` })} />
+              <AssetGrid version={assetsVersion} onError={(m) => toast({ tone: "error", text: m })} onUploaded={(a) => toast({ tone: "ok", text: strings.toast.uploaded(a.map((x) => x.name).join(", ")) })} />
             </aside>
           ) : (
           <LeftPanel
@@ -1426,10 +1427,10 @@ export function App() {
             onMoveBoards={(patches, done) =>
               update(
                 (b) => ({ ...b, boards: { ...b.boards, ...Object.fromEntries(Object.entries(patches).map(([f, p]) => [f, { ...b.boards[f], ...p, autoPlaced: undefined }])) } }),
-                done ? (Object.values(patches).some((p) => p.w != null) ? "보드 크기" : "보드 옮기기") : undefined,
+                done ? (Object.values(patches).some((p) => p.w != null) ? strings.history.resizeBoard : strings.history.moveBoard) : undefined,
               )
             }
-            onMoveNote={(id, patch, done) => update((b) => ({ ...b, notes: { ...b.notes, [id]: { ...b.notes[id], ...patch } } }), done ? ("text" in patch ? "메모 고치기" : "메모 옮기기") : undefined)}
+            onMoveNote={(id, patch, done) => update((b) => ({ ...b, notes: { ...b.notes, [id]: { ...b.notes[id], ...patch } } }), done ? ("text" in patch ? strings.history.editNote : strings.history.moveNote) : undefined)}
             onDeleteNote={deleteNote}
             onPlay={(f) => (inlinePlay === f ? stopInline() : setInlinePlay(f))}
             playing={inlinePlay}
@@ -1455,17 +1456,17 @@ export function App() {
                   setSelected([]);
                   setSelectedNote(null);
                 }}
-                onChange={(id, patch, done) => patchShape(id, patch, done ? (patch.w != null ? "도형 크기" : "도형 옮기기") : undefined)}
+                onChange={(id, patch, done) => patchShape(id, patch, done ? (patch.w != null ? strings.history.resizeShape : strings.history.moveShape) : undefined)}
                 onContext={(id, at) =>
                   setMenu({
                     x: at.clientX,
                     y: at.clientY,
-                    title: "도형",
+                    title: strings.menu.shape,
                     items: [
-                      { label: "맨 앞으로", icon: "front", shortcut: `${mod}]`, run: () => shapeZ(id, "front") },
-                      { label: "맨 뒤로", icon: "back", shortcut: `${mod}[`, run: () => shapeZ(id, "back") },
+                      { label: strings.menu.front, icon: "front", shortcut: `${mod}]`, run: () => shapeZ(id, "front") },
+                      { label: strings.menu.back, icon: "back", shortcut: `${mod}[`, run: () => shapeZ(id, "back") },
                       "sep",
-                      { label: "삭제", icon: "trash", shortcut: "⌫", danger: true, run: () => deleteShape(id) },
+                      { label: strings.menu.delete, icon: "trash", shortcut: "⌫", danger: true, run: () => deleteShape(id) },
                     ],
                   })
                 }
@@ -1483,9 +1484,9 @@ export function App() {
           {visibleBoards.length === 0 && visibleNotes.length === 0 && visibleShapes.length === 0 && (
             <div className="canvas-empty">
               <Icon name="board" size={32} />
-              <p>이 페이지는 비어 있어요</p>
+              <p>{strings.app.emptyPage}</p>
               <button className="primary" onClick={() => setTool("board")}>
-                보드 그리기 <kbd>B</kbd>
+                {strings.app.drawBoard} <kbd>B</kbd>
               </button>
             </div>
           )}
@@ -1494,12 +1495,12 @@ export function App() {
           )}
         </div>
         <div className="right" hidden={!rightOpen}>
-          <div className="right-tabs" role="tablist" aria-label="오른쪽 패널">
+          <div className="right-tabs" role="tablist" aria-label={strings.tabs.right}>
             <button role="tab" aria-selected={rightTab === "inspect"} className={rightTab === "inspect" ? "on" : ""} onClick={() => setRightTab("inspect")}>
-              속성
+              {strings.tabs.properties}
             </button>
             <button role="tab" aria-selected={rightTab === "chat"} className={rightTab === "chat" ? "on" : ""} onClick={() => openChat()}>
-              AI <kbd>{mod}J</kbd>
+              {strings.tabs.ai} <kbd>{mod}J</kbd>
             </button>
           </div>
           <div className="chat-wrap" hidden={rightTab !== "chat"}>
@@ -1519,9 +1520,9 @@ export function App() {
           </div>
           {rightTab === "inspect" && (
         <Inspector
-          author={author || "나"}
+          author={author || strings.app.defaultAuthor}
           onAuthor={async () => {
-            const r = await ask.prompt({ title: "댓글 작성자", label: "이름", value: author, ok: "저장" });
+            const r = await ask.prompt({ title: strings.dialog.authorTitle, label: strings.dialog.name, value: author, ok: strings.dialog.save });
             if (!r?.value.trim()) return;
             setAuthor(r.value.trim());
             try {
@@ -1532,7 +1533,7 @@ export function App() {
           }}
           onAskAI={(c) => {
             setChatAttach((a) => ({ ...a, comments: a.comments.some((x) => x.id === c.id) ? a.comments : [...a.comments, { id: c.id, text: c.text, file: c.file }] }));
-            openChat(chatDraft || "이 댓글대로 그 위치만 고쳐 줘", [c.file]);
+            openChat(chatDraft || strings.prompts.fixComment, [c.file]);
           }}
           file={editFile ?? one}
           editing={!!editFile}
@@ -1543,7 +1544,7 @@ export function App() {
           onSelectPath={(p) => editFile && void edit.select([p])}
         >
           {!editFile && selectedShape && shapes[selectedShape] && (
-            <ShapeOptions shape={shapes[selectedShape]} onPatch={(pt) => patchShape(selectedShape, pt, "도형 모양")} onDelete={() => deleteShape(selectedShape)} onFront={() => shapeZ(selectedShape, "front")} onBack={() => shapeZ(selectedShape, "back")} />
+            <ShapeOptions shape={shapes[selectedShape]} onPatch={(pt) => patchShape(selectedShape, pt, strings.history.shapeStyle)} onDelete={() => deleteShape(selectedShape)} onFront={() => shapeZ(selectedShape, "front")} onBack={() => shapeZ(selectedShape, "back")} />
           )}
           {!editFile && selectedNote && board.notes[selectedNote] && (
             <NoteOptions
@@ -1553,7 +1554,7 @@ export function App() {
                   const n: Note = { ...b.notes[selectedNote], ...pt };
                   for (const k of Object.keys(n) as (keyof Note)[]) if (n[k] === undefined) delete n[k];
                   return { ...b, notes: { ...b.notes, [selectedNote]: n } };
-                }, "메모 모양")
+                }, strings.history.noteStyle)
               }
               onDelete={() => deleteNote(selectedNote)}
             />
@@ -1565,7 +1566,7 @@ export function App() {
               onSave={async (values) => {
                 try {
                   await api.post("/api/edit", { file: one, op: "setTweaks", values });
-                  toast({ tone: "ok", text: "Tweaks를 원본에 저장했어요", action: undoAction });
+                  toast({ tone: "ok", text: strings.toast.tweaksSaved, action: undoAction });
                 } catch (e) {
                   toast({ tone: "error", text: String((e as Error).message) });
                 }
@@ -1574,8 +1575,8 @@ export function App() {
           )}
           {lintTarget && board.boards[lintTarget] && (
             <>
-              <CheckList title={`토큰 검사 · ${tokens?.active ?? ""}`} items={lint} empty="토큰 밖 값이 없어요" onPick={(p) => pickPath(lintTarget, p)} onAskAI={() => openChat(`토큰 밖 값을 토큰으로 바꿔 줘(check_tokens로 확인):\n${(lint ?? []).slice(0, 12).map((x) => `- ${x.path ?? "줄 " + x.line}: ${x.message}`).join("\n")}`, [lintTarget])} />
-              <CheckList title="접근성" items={a11y} empty="누르는 영역·명암·라벨 문제가 없어요" onPick={(p) => pickPath(lintTarget, p)} onAskAI={() => openChat(`접근성 문제를 고쳐 줘(보이는 크기는 그대로 두고 누르는 영역은 여백으로):\n${(a11y ?? []).slice(0, 12).map((x) => `- ${x.path}: ${x.message}`).join("\n")}`, [lintTarget])} />
+              <CheckList title={strings.checks.tokenCheck(tokens?.active ?? "")} items={lint} empty={strings.checks.noOffToken} onPick={(p) => pickPath(lintTarget, p)} onAskAI={() => openChat(strings.prompts.fixTokens((lint ?? []).slice(0, 12).map((x) => `- ${x.path ?? strings.prompts.line + x.line}: ${x.message}`).join("\n")), [lintTarget])} />
+              <CheckList title={strings.checks.a11y} items={a11y} empty={strings.checks.a11yOk} onPick={(p) => pickPath(lintTarget, p)} onAskAI={() => openChat(strings.prompts.fixA11y((a11y ?? []).slice(0, 12).map((x) => `- ${x.path}: ${x.message}`).join("\n")), [lintTarget])} />
             </>
           )}
           {!editFile && one && board.boards[one] && (
@@ -1598,19 +1599,19 @@ export function App() {
               onBack={() => reorder([one], "back")}
               onDuplicate={() => void duplicateBoard(one)}
               onDelete={() => void deleteBoards([one])}
-              onLaunch={(on) => update((b) => ({ ...b, launch: on ? { view: "focused", file: one } : { view: "canvas" } }), "시작 화면 설정")}
+              onLaunch={(on) => update((b) => ({ ...b, launch: on ? { view: "focused", file: one } : { view: "canvas" } }), strings.history.launchScreen)}
             />
           )}
           {!editFile && selected.length > 1 && (
             <section className="board-opts">
               <div className="sec-head">
-                <span>보드 {selected.length}개 선택</span>
+                <span>{strings.boardOptions.selectedN(selected.length)}</span>
               </div>
               <div className="btn-row">
-                <button className="icon-btn" aria-label="맨 앞으로" title={`맨 앞으로 (${mod}])`} onClick={() => reorder(selected, "front")}><Icon name="front" /></button>
-                <button className="icon-btn" aria-label="맨 뒤로" title={`맨 뒤로 (${mod}[)`} onClick={() => reorder(selected, "back")}><Icon name="back" /></button>
-                <button className="icon-btn" aria-label="선택한 보드로 이동" title="선택한 보드로 이동 (⇧2)" onClick={() => goTo(selected)}><Icon name="fit" /></button>
-                <button className="icon-btn danger" aria-label="삭제" title="삭제 (⌫)" onClick={() => void deleteBoards(selected)}><Icon name="trash" /></button>
+                <button className="icon-btn" aria-label={strings.boardOptions.front} title={strings.boardOptions.frontTitleMod(mod)} onClick={() => reorder(selected, "front")}><Icon name="front" /></button>
+                <button className="icon-btn" aria-label={strings.boardOptions.back} title={strings.boardOptions.backTitleMod(mod)} onClick={() => reorder(selected, "back")}><Icon name="back" /></button>
+                <button className="icon-btn" aria-label={strings.boardOptions.goToSelected} title={strings.boardOptions.goToSelectedTitle} onClick={() => goTo(selected)}><Icon name="fit" /></button>
+                <button className="icon-btn danger" aria-label={strings.boardOptions.delete} title={strings.boardOptions.deleteTitleKey} onClick={() => void deleteBoards(selected)}><Icon name="trash" /></button>
               </div>
             </section>
           )}
@@ -1635,7 +1636,7 @@ export function App() {
                 onAlign={async (dir) => {
                   const d = frames.current.get(editFile)?.contentDocument;
                   const ops = d && alignOps(d, sel.path, sel.hash, dir);
-                  if (!ops) return toast({ text: "블록 흐름에서는 세로 정렬을 쓸 수 없어요. 부모를 flex로 바꿔 보세요" });
+                  if (!ops) return toast({ text: strings.toast.blockFlow });
                   await doEdit({ op: "batch", ops });
                 }}
                 onReplaceImage={sel.tag === "img" || /url\(/.test(sel.styles["background-image"] ?? "") ? () => replaceImage(sel.path, sel.tag === "img") : null}

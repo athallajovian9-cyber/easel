@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { api } from "./api";
 import { Icon } from "./icons";
+import { strings } from "./strings";
 
 export type Asset = { name: string; size: number; kind: "image" | "font" | "file"; url: string; ref: string };
 
@@ -64,26 +65,26 @@ export function AssetGrid(p: { version: number; onPick?: (a: Asset) => void; pic
       }}
     >
       <label className="upload">
-        <Icon name="plus" size={14} /> {busy ? "올리는 중…" : "올리기 (이미지·폰트, 끌어 놓기도 돼요)"}
+        <Icon name="plus" size={14} /> {busy ? strings.assets.uploading : strings.assets.upload}
         <input type="file" hidden multiple accept="image/*,.woff,.woff2,.ttf,.otf" onChange={(e) => e.target.files && void up(e.target.files)} />
       </label>
       {list == null ? (
         <p className="empty">
-          <span className="spinner" aria-hidden="true" /> 불러오는 중…
+          <span className="spinner" aria-hidden="true" /> {strings.assets.loading}
         </p>
       ) : shown.length === 0 ? (
-        <p className="empty">자산이 없어요. 이미지를 올리면 docs/design/assets/에 저장되고 화면에서 ../assets/이름 으로 써요.</p>
+        <p className="empty">{strings.assets.empty}</p>
       ) : (
         <ul className="asset-grid">
           {shown.map((a) => (
             <li key={a.name}>
               <button
                 className="asset"
-                title={`${a.ref} · ${kb(a.size)}${p.onPick ? "" : " · 누르면 경로 복사"}`}
+                title={`${a.ref} · ${kb(a.size)}${p.onPick ? "" : strings.assets.copyPath}`}
                 aria-label={`${a.name}${p.pickLabel ?? ""}`}
                 onClick={() => (p.onPick ? p.onPick(a) : void navigator.clipboard.writeText(a.ref).catch(() => {}))}
               >
-                {a.kind === "image" ? <img src={a.url} alt="" loading="lazy" /> : <span className="asset-font">{a.kind === "font" ? "Aa" : "파일"}</span>}
+                {a.kind === "image" ? <img src={a.url} alt="" loading="lazy" /> : <span className="asset-font">{a.kind === "font" ? "Aa" : strings.assets.file}</span>}
                 <span className="asset-name">{a.name}</span>
               </button>
             </li>
@@ -105,11 +106,11 @@ export function AssetPicker({ open, version, onClose, onPick, onError }: { open:
   if (!open) return null;
   return (
     <div className="dialog-backdrop" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="dialog wide" role="dialog" aria-modal="true" aria-label="이미지 고르기">
-        <h2>이미지 고르기</h2>
-        <AssetGrid version={version} only="image" pickLabel="(으)로 바꾸기" onPick={onPick} onError={onError} onUploaded={(a) => a[0] && a[0].kind === "image" && onPick(a[0])} />
+      <div className="dialog wide" role="dialog" aria-modal="true" aria-label={strings.assets.pickImage}>
+        <h2>{strings.assets.pickImage}</h2>
+        <AssetGrid version={version} only="image" pickLabel={strings.assets.pickLabel} onPick={onPick} onError={onError} onUploaded={(a) => a[0] && a[0].kind === "image" && onPick(a[0])} />
         <div className="dialog-actions">
-          <button onClick={onClose}>닫기</button>
+          <button onClick={onClose}>{strings.assets.close}</button>
         </div>
       </div>
     </div>

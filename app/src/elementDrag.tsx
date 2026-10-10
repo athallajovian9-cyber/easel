@@ -5,6 +5,7 @@ import { useRef, useState, type PointerEvent as RPointerEvent } from "react";
 
 import { elementAt, pathOf, rectOf, type Rect } from "./editor";
 import { Icon } from "./icons";
+import { strings } from "./strings";
 
 export type Freeze = { path: string; props: Record<string, string> };
 export type DropPlan = { toParentPath: string; index: number; freeze: Freeze[] };
@@ -169,8 +170,8 @@ export function EditHandles(p: {
       {line && <div className="drop-line" style={{ left: line.x, top: line.y, width: Math.max(line.w, 2 * s), height: Math.max(line.h, 2 * s) }} />}
       <button
         className="el-move"
-        aria-label="요소 옮기기 (Alt: 가리킨 상자 안으로)"
-        title="끌어서 옮기기 · Alt를 누르면 가리킨 상자 안으로"
+        aria-label={strings.elementDrag.moveAria}
+        title={strings.elementDrag.moveTitle}
         style={{ left: Math.max(0, r.x), top: r.y >= 22 * s ? r.y - 22 * s : Math.max(0, r.y), transform: `scale(${s})`, transformOrigin: r.y >= 22 * s ? "0 100%" : "0 0" }}
         onPointerDown={start("move")}
         onPointerMove={move}
@@ -183,7 +184,7 @@ export function EditHandles(p: {
           key={k}
           className={`el-resize ${k}`}
           role="slider"
-          aria-label={k === "e" ? "너비" : k === "s" ? "높이" : "크기"}
+          aria-label={k === "e" ? strings.elementDrag.width : k === "s" ? strings.elementDrag.height : strings.elementDrag.size}
           aria-valuetext={`${Math.round(r.w)} × ${Math.round(r.h)}`}
           style={{
             left: k === "s" ? r.x + r.w / 2 - hs / 2 : r.x + r.w - hs / 2,

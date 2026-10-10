@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { api } from "./api";
 import { Icon } from "./icons";
+import { strings } from "./strings";
 
 export type ChatEvent =
   | { kind: "start"; agent: string; prompt: string; variants?: string[] }
@@ -127,12 +128,12 @@ export function ChatPanel(p: {
     if (!text || running) return;
     setError(null);
     const chips = [
-      ...(sel ? [`요소 <${sel.tag}>`] : []),
+      ...(sel ? [strings.chat.chipElement(sel.tag)] : []),
       ...boards.map((f) => p.titleOf(f)),
-      ...(useVisible && p.visibleCount ? [`보이는 보드 ${p.visibleCount}`] : []),
-      ...p.attach.comments.map((c) => `댓글 "${c.text.slice(0, 16)}"`),
+      ...(useVisible && p.visibleCount ? [strings.chat.chipVisible(p.visibleCount)] : []),
+      ...p.attach.comments.map((c) => strings.chat.chipComment(c.text.slice(0, 16))),
       ...p.attach.refs.map((r) => r.name ?? r.value),
-      ...(variants > 1 ? [`안 ${variants}개`] : []),
+      ...(variants > 1 ? [strings.chat.variants(variants)] : []),
     ];
     try {
       const r = await api.post<{ id: string; variants: string[] }>("/api/chat", {
@@ -160,7 +161,7 @@ export function ChatPanel(p: {
   const upload = async (files: FileList | File[]) => {
     for (const f of Array.from(files)) {
       if (f.size > 15 * 1024 * 1024) {
-        setError(`${f.name}: 15MB보다 커요`);
+        setError(strings.chat.tooBig(f.name));
         continue;
       }
       const data = await new Promise<string>((res) => {
@@ -169,7 +170,7 @@ export function ChatPanel(p: {
         rd.readAsDataURL(f);
       });
       try {
-        const r = await api.post<Ref>("/api/refs", { name: f.name || "붙여넣은-이미지.png", data });
+        const r = await api.post<Ref>("/api/refs", { name: f.name || strings.defaults.pastedImage, data });
         p.setAttach((a) => ({ ...a, refs: [...a.refs, r] }));
       } catch (e) {
         setError((e as Error).message);
@@ -179,25 +180,25 @@ export function ChatPanel(p: {
 
   const current = agents.find((a) => a.id === agent);
   return (
-    <section className="chat" aria-label="AI 채팅">
+    <section className="chat" aria-label={strings.chat.aria}>
       <div className="chat-head">
         <label className="agent-pick">
-          <span className="sr-only">에이전트</span>
-          <select value={agent} onChange={(e) => setAgent(e.target.value)} disabled={!!running} aria-label="에이전트">
+          <span className="sr-only">{strings.chat.agent}</span>
+          <select value={agent} onChange={(e) => setAgent(e.target.value)} disabled={!!running} aria-label={strings.chat.agent}>
             {(agents.length ? agents : [{ id: "claude", label: "Claude Code", ok: true }, { id: "codex", label: "Codex", ok: true }]).map((a) => (
               <option key={a.id} value={a.id}>
                 {a.label}
-                {a.ok ? "" : " (설치 안 됨)"}
+                {a.ok ? "" : strings.chat.notInstalled}
               </option>
             ))}
           </select>
         </label>
-        {sessions[agent] && <span className="muted small">이어서 대화 중</span>}
+        {sessions[agent] && <span className="muted small">{strings.chat.continuing}</span>}
         <div className="spacer" />
         <button
           className="icon-btn sm"
-          aria-label="새 대화"
-          title="새 대화"
+          aria-label={strings.chat.newChat}
+          title={strings.chat.newChat}
           disabled={!!running || (!msgs.length && !sessions[agent])}
           onClick={() => {
             setMsgs([]);
@@ -212,15 +213,10 @@ export function ChatPanel(p: {
           <div className="chat-empty">
             <Icon name="comment" size={28} />
             <p>
-              선택한 보드·요소와 화면에 보이는 보드를 맥락으로 붙여 {AGENT_LABEL[agent] ?? agent}에게 보내요. 에이전트가 원본 HTML을 직접 고치고, 캔버스는 바로 다시 그려요.
+              {strings.chat.intro(AGENT_LABEL[agent] ?? agent)}
             </p>
             <div className="chat-suggest">
-              {[
-                { label: "AI 리뷰: 접근성·명암·위계", text: "고른 화면을 리뷰해 줘: 접근성(누르는 영역 48·명암 4.5·라벨), 정보 위계, 토큰(get_tokens·check_tokens) 위반. 우선순위대로 제안만 하고 고치지는 마.", n: 1 },
-                { label: "이 화면 변형 3가지", text: "고른 화면을 서로 다른 방향으로 3가지 안을 만들어 줘(배치·위계·강조 방식이 각각 다르게).", n: 3 },
-                { label: "선택한 버튼 문구를 더 짧게", text: "선택한 버튼 문구를 더 짧게", n: 1 },
-                { label: "빈 상태 화면 하나 새로 만들어 줘", text: "빈 상태 화면 하나 새로 만들어 줘", n: 1 },
-              ].map((x) => (
+              {strings.chat.suggestions.map((x) => (
                 <button
                   key={x.label}
                   onClick={() => {
@@ -232,7 +228,7 @@ export function ChatPanel(p: {
                 </button>
               ))}
             </div>
-            {current && !current.ok && <p className="warn">{current.label} 명령을 찾지 못했어요. 설치하고 로그인한 뒤 다시 열어 주세요.</p>}
+            {current && !current.ok && <p className="warn">{strings.chat.notFound(current.label)}</p>}
           </div>
         ) : (
           msgs.map((m, i) =>
@@ -253,13 +249,13 @@ export function ChatPanel(p: {
               <div key={i} className={`msg ai ${m.status}`}>
                 <div className="msg-head">
                   <strong>{AGENT_LABEL[m.agent] ?? m.agent}</strong>
-                  {m.status === "running" && <span className="spinner" aria-label="실행 중" />}
-                  {m.status === "cancelled" && <span className="muted">취소됨</span>}
+                  {m.status === "running" && <span className="spinner" aria-label={strings.chat.running} />}
+                  {m.status === "cancelled" && <span className="muted">{strings.chat.cancelled}</span>}
                   {m.status === "done" && m.cost != null && <span className="muted small">${m.cost.toFixed(3)}</span>}
                 </div>
                 {m.variants?.length ? (
                   <button className="link" onClick={() => p.onLocate(m.variants!)}>
-                    안 {m.variants.length}개를 나란히 만들었어요 · 보기
+                    {strings.chat.madeVariants(m.variants.length)}
                   </button>
                 ) : null}
                 {m.parts.map((x, j) =>
@@ -279,7 +275,7 @@ export function ChatPanel(p: {
                     </div>
                   ),
                 )}
-                {m.status === "running" && !m.parts.length && <div className="muted">생각하는 중…</div>}
+                {m.status === "running" && !m.parts.length && <div className="muted">{strings.chat.thinking}</div>}
               </div>
             ),
           )
@@ -295,12 +291,12 @@ export function ChatPanel(p: {
       >
         <div className="chips">
           {p.selection && (
-            <Chip on={useSel} onToggle={() => setUseSel((v) => !v)} icon="select" label={`요소 <${p.selection.tag}> ${p.selection.text.slice(0, 14)}`} />
+            <Chip on={useSel} onToggle={() => setUseSel((v) => !v)} icon="select" label={strings.chat.chipElementText(p.selection.tag, p.selection.text.slice(0, 14))} />
           )}
-          {p.boards.length > 0 && <Chip on={useBoards} onToggle={() => setUseBoards((v) => !v)} icon="board" label={p.boards.length === 1 ? p.titleOf(p.boards[0]) : `보드 ${p.boards.length}개`} />}
-          {p.visibleCount > 0 && <Chip on={useVisible} onToggle={() => setUseVisible((v) => !v)} icon="fit" label={`보이는 보드 ${p.visibleCount}`} />}
+          {p.boards.length > 0 && <Chip on={useBoards} onToggle={() => setUseBoards((v) => !v)} icon="board" label={p.boards.length === 1 ? p.titleOf(p.boards[0]) : strings.chat.chipBoards(p.boards.length)} />}
+          {p.visibleCount > 0 && <Chip on={useVisible} onToggle={() => setUseVisible((v) => !v)} icon="fit" label={strings.chat.chipVisible(p.visibleCount)} />}
           {p.attach.comments.map((c) => (
-            <Chip key={c.id} on icon="comment" label={`댓글 "${c.text.slice(0, 14)}"`} onRemove={() => p.setAttach((a) => ({ ...a, comments: a.comments.filter((x) => x.id !== c.id) }))} />
+            <Chip key={c.id} on icon="comment" label={strings.chat.chipComment(c.text.slice(0, 14))} onRemove={() => p.setAttach((a) => ({ ...a, comments: a.comments.filter((x) => x.id !== c.id) }))} />
           ))}
           {p.attach.refs.map((r, i) => (
             <Chip key={i} on icon={r.kind === "url" ? "link" : "page"} label={r.name ?? r.value} onRemove={() => p.setAttach((a) => ({ ...a, refs: a.refs.filter((_, j) => j !== i) }))} />
@@ -312,7 +308,7 @@ export function ChatPanel(p: {
               autoFocus
               value={urlInput}
               placeholder="https://"
-              aria-label="참고 링크"
+              aria-label={strings.chat.refLink}
               onChange={(e) => setUrlInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.nativeEvent.isComposing) return;
@@ -329,8 +325,8 @@ export function ChatPanel(p: {
           ref={p.inputRef}
           value={p.draft}
           rows={3}
-          placeholder={running ? "실행 중… (Esc로 취소)" : "무엇을 바꿀까요? (Enter 보내기 · Shift+Enter 줄바꿈)"}
-          aria-label="AI에게 보낼 말"
+          placeholder={running ? strings.chat.placeholderRunning : strings.chat.placeholder}
+          aria-label={strings.chat.input}
           onChange={(e) => p.setDraft(e.target.value)}
           onPaste={(e) => {
             const files = Array.from(e.clipboardData.files);
@@ -353,29 +349,29 @@ export function ChatPanel(p: {
         />
         {error && <p className="warn small">{error}</p>}
         <div className="composer-bar">
-          <button className="icon-btn sm" aria-label="파일·이미지 첨부" title="파일·이미지 첨부(끌어 놓기·붙여넣기도 돼요)" onClick={() => fileRef.current?.click()}>
+          <button className="icon-btn sm" aria-label={strings.chat.attach} title={strings.chat.attachTitle} onClick={() => fileRef.current?.click()}>
             <Icon name="plus" size={14} />
           </button>
-          <button className="icon-btn sm" aria-label="참고 링크 추가" title="참고 링크 추가" onClick={() => setUrlInput("")}>
+          <button className="icon-btn sm" aria-label={strings.chat.addLink} title={strings.chat.addLink} onClick={() => setUrlInput("")}>
             <Icon name="link" size={14} />
           </button>
           <input ref={fileRef} type="file" multiple hidden accept="image/*,.pdf,.md,.txt,.html,.csv,.json" onChange={(e) => e.target.files && void upload(e.target.files)} />
-          <label className="variants" title={canVariants ? "고른 보드를 복사해 서로 다른 안을 나란히 만든다" : "보드를 하나 고르면 쓸 수 있어요"}>
-            <select value={variants} disabled={!canVariants || !!running} onChange={(e) => setVariants(Number(e.target.value))} aria-label="안 개수">
-              <option value={1}>안 1개</option>
-              <option value={2}>안 2개</option>
-              <option value={3}>안 3개</option>
-              <option value={4}>안 4개</option>
+          <label className="variants" title={canVariants ? strings.chat.variantsTitle : strings.chat.variantsDisabledTitle}>
+            <select value={variants} disabled={!canVariants || !!running} onChange={(e) => setVariants(Number(e.target.value))} aria-label={strings.chat.variantsAria}>
+              <option value={1}>{strings.chat.variants(1)}</option>
+              <option value={2}>{strings.chat.variants(2)}</option>
+              <option value={3}>{strings.chat.variants(3)}</option>
+              <option value={4}>{strings.chat.variants(4)}</option>
             </select>
           </label>
           <div className="spacer" />
           {running ? (
             <button className="danger" onClick={cancel}>
-              <Icon name="close" size={14} /> 취소
+              <Icon name="close" size={14} /> {strings.chat.cancel}
             </button>
           ) : (
             <button className="primary" disabled={!p.draft.trim()} onClick={() => void send()}>
-              보내기
+              {strings.chat.send}
             </button>
           )}
         </div>
@@ -387,12 +383,12 @@ export function ChatPanel(p: {
 function Chip({ on, onToggle, onRemove, icon, label }: { on: boolean; onToggle?: () => void; onRemove?: () => void; icon: Parameters<typeof Icon>[0]["name"]; label: string }) {
   return (
     <span className={`chip ${on ? "on" : "off"}`}>
-      <button className="chip-main" onClick={onToggle} disabled={!onToggle} aria-pressed={onToggle ? on : undefined} title={onToggle ? (on ? "누르면 빼요" : "누르면 붙여요") : undefined}>
+      <button className="chip-main" onClick={onToggle} disabled={!onToggle} aria-pressed={onToggle ? on : undefined} title={onToggle ? (on ? strings.chat.chipRemoveTitle : strings.chat.chipAddTitle) : undefined}>
         <Icon name={icon} size={12} />
         <span>{label}</span>
       </button>
       {onRemove && (
-        <button className="chip-x" aria-label={`${label} 빼기`} onClick={onRemove}>
+        <button className="chip-x" aria-label={strings.chat.remove(label)} onClick={onRemove}>
           <Icon name="close" size={12} />
         </button>
       )}

@@ -4,16 +4,17 @@ import { useRef, useState, type PointerEvent as RPointerEvent } from "react";
 
 import { Icon } from "./icons";
 import type { LayoutGuide, Note, Shape, ShapeKind, View } from "./types";
+import { strings } from "./strings";
 
 export const STICKY_COLORS: { id: string; label: string; bg: string }[] = [
-  { id: "yellow", label: "노랑", bg: "#FFF1A8" },
-  { id: "orange", label: "주황", bg: "#FFD9BC" },
-  { id: "pink", label: "분홍", bg: "#FFD6E2" },
-  { id: "purple", label: "보라", bg: "#E5DAFF" },
-  { id: "blue", label: "파랑", bg: "#D2E4FF" },
-  { id: "green", label: "초록", bg: "#D5F0D3" },
-  { id: "gray", label: "회색", bg: "#ECEBE7" },
-  { id: "white", label: "흰색", bg: "#FFFFFF" },
+  { id: "yellow", label: strings.shapes.stickyColors.yellow, bg: "#FFF1A8" },
+  { id: "orange", label: strings.shapes.stickyColors.orange, bg: "#FFD9BC" },
+  { id: "pink", label: strings.shapes.stickyColors.pink, bg: "#FFD6E2" },
+  { id: "purple", label: strings.shapes.stickyColors.purple, bg: "#E5DAFF" },
+  { id: "blue", label: strings.shapes.stickyColors.blue, bg: "#D2E4FF" },
+  { id: "green", label: strings.shapes.stickyColors.green, bg: "#D5F0D3" },
+  { id: "gray", label: strings.shapes.stickyColors.gray, bg: "#ECEBE7" },
+  { id: "white", label: strings.shapes.stickyColors.white, bg: "#FFFFFF" },
 ];
 export const stickyBg = (c?: string) => STICKY_COLORS.find((x) => x.id === c)?.bg ?? STICKY_COLORS[0].bg;
 export const MAX_NOTES = 200;
@@ -113,7 +114,7 @@ export function ShapesLayer(p: {
               <div
                 className="shape-resize"
                 role="slider"
-                aria-label="도형 크기"
+                aria-label={strings.shapes.shapeSize}
                 aria-valuetext={`${s.w} × ${s.h}`}
                 style={{ width: 12 / p.zoom, height: 12 / p.zoom, right: -6 / p.zoom, bottom: -6 / p.zoom, borderWidth: 1.5 / p.zoom }}
                 onPointerDown={start(id, "resize")}
@@ -159,7 +160,7 @@ export function ShapeDrawer({ tool, view, onDone }: { tool: ShapeKind; view: Vie
   return (
     <div
       className="shape-drawer"
-      aria-label="도형 그리기"
+      aria-label={strings.shapes.drawShape}
       onPointerDown={(e) => {
         if (e.button !== 0) return;
         (e.currentTarget as Element).setPointerCapture(e.pointerId);
@@ -201,34 +202,34 @@ export function ShapeDrawer({ tool, view, onDone }: { tool: ShapeKind; view: Vie
 
 /* ---------------- 오른쪽 패널: 도형 옵션 ---------------- */
 export function ShapeOptions({ shape, onPatch, onDelete, onFront, onBack }: { shape: Shape; onPatch: (p: Partial<Shape>) => void; onDelete: () => void; onFront: () => void; onBack: () => void }) {
-  const KIND: Record<ShapeKind, string> = { rect: "사각형", oval: "타원", line: "선", arrow: "화살표", pen: "펜", image: "이미지" };
+  const KIND: Record<ShapeKind, string> = strings.shapes.kinds;
   const Swatches = ({ value, onPick, allowNone }: { value: string; onPick: (v: string) => void; allowNone?: boolean }) => (
     <span className="swatches">
       {SHAPE_COLORS.filter((c) => allowNone || c !== "none").map((c) => (
-        <button key={c} className={`swatch ${value === c ? "on" : ""} ${c === "none" ? "none" : ""}`} title={c === "none" ? "없음" : c} aria-label={c === "none" ? "없음" : c} style={{ background: c === "none" ? undefined : c }} onClick={() => onPick(c)} />
+        <button key={c} className={`swatch ${value === c ? "on" : ""} ${c === "none" ? "none" : ""}`} title={c === "none" ? strings.shapes.none : c} aria-label={c === "none" ? strings.shapes.none : c} style={{ background: c === "none" ? undefined : c }} onClick={() => onPick(c)} />
       ))}
     </span>
   );
   return (
-    <section className="board-opts" aria-label="도형 옵션">
+    <section className="board-opts" aria-label={strings.shapes.options}>
       <div className="sec-head">
         <span>{KIND[shape.kind]}</span>
       </div>
       {shape.kind !== "image" && (
         <>
           <div className="field-row">
-            <span>선 색</span>
+            <span>{strings.shapes.strokeColor}</span>
             <Swatches value={shape.stroke ?? "#111111"} onPick={(v) => onPatch({ stroke: v })} />
           </div>
           {(shape.kind === "rect" || shape.kind === "oval") && (
             <div className="field-row">
-              <span>채우기</span>
+              <span>{strings.shapes.fill}</span>
               <Swatches value={shape.fill ?? "none"} onPick={(v) => onPatch({ fill: v })} allowNone />
             </div>
           )}
           <label className="field-row">
-            <span>굵기</span>
-            <input type="range" min={1} max={24} value={shape.strokeWidth ?? 4} onChange={(e) => onPatch({ strokeWidth: Number(e.target.value) })} aria-label="선 굵기" />
+            <span>{strings.shapes.weight}</span>
+            <input type="range" min={1} max={24} value={shape.strokeWidth ?? 4} onChange={(e) => onPatch({ strokeWidth: Number(e.target.value) })} aria-label={strings.shapes.strokeWeight} />
           </label>
         </>
       )}
@@ -236,9 +237,9 @@ export function ShapeOptions({ shape, onPatch, onDelete, onFront, onBack }: { sh
         {shape.w} × {shape.h} · ({shape.x}, {shape.y})
       </div>
       <div className="btn-row">
-        <button className="icon-btn" aria-label="맨 앞으로" title="맨 앞으로" onClick={onFront}><Icon name="front" /></button>
-        <button className="icon-btn" aria-label="맨 뒤로" title="맨 뒤로" onClick={onBack}><Icon name="back" /></button>
-        <button className="icon-btn danger" aria-label="도형 삭제" title="삭제 (⌫)" onClick={onDelete}><Icon name="trash" /></button>
+        <button className="icon-btn" aria-label={strings.shapes.front} title={strings.shapes.front} onClick={onFront}><Icon name="front" /></button>
+        <button className="icon-btn" aria-label={strings.shapes.back} title={strings.shapes.back} onClick={onBack}><Icon name="back" /></button>
+        <button className="icon-btn danger" aria-label={strings.shapes.deleteShape} title={strings.shapes.deleteTitle} onClick={onDelete}><Icon name="trash" /></button>
       </div>
     </section>
   );
@@ -249,52 +250,52 @@ export function NoteOptions({ note, onPatch, onDelete }: { note: Note; onPatch: 
   const title = note.kind === "title";
   const def = title ? 72 : 22;
   return (
-    <section className="board-opts" aria-label="메모 옵션">
+    <section className="board-opts" aria-label={strings.notes.options}>
       <div className="sec-head">
-        <span>{title ? "제목" : "포스트잇"}</span>
+        <span>{title ? strings.notes.title : strings.notes.sticky}</span>
       </div>
       <label className="field-row">
-        <span>글자 크기</span>
-        <select value={note.size ?? def} onChange={(e) => onPatch({ size: Number(e.target.value) === def ? undefined : Number(e.target.value) })} aria-label="글자 크기">
+        <span>{strings.notes.fontSize}</span>
+        <select value={note.size ?? def} onChange={(e) => onPatch({ size: Number(e.target.value) === def ? undefined : Number(e.target.value) })} aria-label={strings.notes.fontSize}>
           {(title ? [32, 48, 56, 72, 96, 128] : [14, 18, 22, 28, 36]).map((n) => (
             <option key={n} value={n}>
-              {n}px{n === def ? " (기본)" : ""}
+              {n}px{n === def ? strings.notes.defaultSuffix : ""}
             </option>
           ))}
         </select>
       </label>
-      <div className="btn-row" role="group" aria-label="글자 모양">
-        <button className={`icon-btn ${note.bold ?? title ? "on" : ""}`} aria-pressed={!!(note.bold ?? title)} aria-label="굵게" title="굵게" onClick={() => onPatch({ bold: !(note.bold ?? title) })}>
+      <div className="btn-row" role="group" aria-label={strings.notes.textStyle}>
+        <button className={`icon-btn ${note.bold ?? title ? "on" : ""}`} aria-pressed={!!(note.bold ?? title)} aria-label={strings.notes.bold} title={strings.notes.bold} onClick={() => onPatch({ bold: !(note.bold ?? title) })}>
           <strong>B</strong>
         </button>
-        <button className={`icon-btn ${note.italic ? "on" : ""}`} aria-pressed={!!note.italic} aria-label="기울임" title="기울임" onClick={() => onPatch({ italic: !note.italic || undefined })}>
+        <button className={`icon-btn ${note.italic ? "on" : ""}`} aria-pressed={!!note.italic} aria-label={strings.notes.italic} title={strings.notes.italic} onClick={() => onPatch({ italic: !note.italic || undefined })}>
           <em>I</em>
         </button>
       </div>
       {!title && (
         <div className="field-row">
-          <span>색</span>
+          <span>{strings.notes.color}</span>
           <span className="swatches">
             {STICKY_COLORS.map((c) => (
-              <button key={c.id} className={`swatch ${(note.color ?? "yellow") === c.id ? "on" : ""}`} title={c.label} aria-label={`${c.label} 포스트잇`} style={{ background: c.bg }} onClick={() => onPatch({ color: c.id === "yellow" ? undefined : c.id })} />
+              <button key={c.id} className={`swatch ${(note.color ?? "yellow") === c.id ? "on" : ""}`} title={c.label} aria-label={strings.notes.stickyColor(c.label)} style={{ background: c.bg }} onClick={() => onPatch({ color: c.id === "yellow" ? undefined : c.id })} />
             ))}
           </span>
         </div>
       )}
       {title ? (
         <div className="grid2">
-          <NumIn label="최대 너비" value={note.maxW ?? 2000} onCommit={(v) => onPatch({ maxW: v })} />
-          <NumIn label="최대 높이" value={note.maxH ?? 0} onCommit={(v) => onPatch({ maxH: v || undefined })} />
+          <NumIn label={strings.notes.maxWidth} value={note.maxW ?? 2000} onCommit={(v) => onPatch({ maxW: v })} />
+          <NumIn label={strings.notes.maxHeight} value={note.maxH ?? 0} onCommit={(v) => onPatch({ maxH: v || undefined })} />
         </div>
       ) : (
         <div className="grid2">
-          <NumIn label="너비" value={note.w ?? 400} onCommit={(v) => onPatch({ w: v })} />
-          <NumIn label="높이" value={note.h ?? 0} onCommit={(v) => onPatch({ h: v || undefined })} />
+          <NumIn label={strings.notes.width} value={note.w ?? 400} onCommit={(v) => onPatch({ w: v })} />
+          <NumIn label={strings.notes.height} value={note.h ?? 0} onCommit={(v) => onPatch({ h: v || undefined })} />
         </div>
       )}
-      <p className="muted small">{title ? "최대 너비·높이를 넘으면 글자가 줄어들어요(0은 제한 없음)." : "높이를 정하면 넘치는 글은 스크롤돼요(0은 내용만큼)."}</p>
+      <p className="muted small">{title ? strings.notes.titleHint : strings.notes.stickyHint}</p>
       <div className="btn-row">
-        <button className="icon-btn danger" aria-label="메모 삭제" title="삭제 (⌫)" onClick={onDelete}><Icon name="trash" /></button>
+        <button className="icon-btn danger" aria-label={strings.notes.deleteNote} title={strings.notes.deleteTitle} onClick={onDelete}><Icon name="trash" /></button>
       </div>
     </section>
   );
@@ -354,51 +355,51 @@ export function GuidesOverlay({ guides, w, h }: { guides: LayoutGuide[]; w: numb
 }
 
 export function GuidesEditor({ guides, onChange }: { guides: LayoutGuide[]; onChange: (g: LayoutGuide[], label: string) => void }) {
-  const set = (i: number, patch: Partial<LayoutGuide>) => onChange(guides.map((g, j) => (j === i ? { ...g, ...patch } : g)), "레이아웃 가이드 고치기");
-  const TYPE = { columns: "열", rows: "행", grid: "격자" } as const;
+  const set = (i: number, patch: Partial<LayoutGuide>) => onChange(guides.map((g, j) => (j === i ? { ...g, ...patch } : g)), strings.history.editGuide);
+  const TYPE = strings.guides.types;
   return (
-    <section className="board-opts guides-editor" aria-label="레이아웃 가이드">
+    <section className="board-opts guides-editor" aria-label={strings.guides.aria}>
       <div className="sec-head">
-        <span>레이아웃 가이드 {guides.length}/{MAX_GUIDES}</span>
+        <span>{strings.guides.heading(guides.length, MAX_GUIDES)}</span>
         <span className="btn-row">
           {(["columns", "rows", "grid"] as const).map((t) => (
-            <button key={t} className="icon-btn sm" disabled={guides.length >= MAX_GUIDES} title={`${TYPE[t]} 가이드 추가`} aria-label={`${TYPE[t]} 가이드 추가`} onClick={() => onChange([...guides, newGuide(t)], "레이아웃 가이드 추가")}>
+            <button key={t} className="icon-btn sm" disabled={guides.length >= MAX_GUIDES} title={strings.guides.add[t]} aria-label={strings.guides.add[t]} onClick={() => onChange([...guides, newGuide(t)], strings.history.addGuide)}>
               <span className="small">{TYPE[t]}</span>
             </button>
           ))}
         </span>
       </div>
-      {guides.length === 0 && <p className="muted small">열·행·격자 가이드를 6개까지 둘 수 있어요. 캔버스에서만 보이고 화면 HTML에는 안 들어가요. 모두 숨기기: ⌃G</p>}
+      {guides.length === 0 && <p className="muted small">{strings.guides.empty}</p>}
       {guides.map((g, i) => (
         <div key={i} className="guide-row">
           <div className="guide-head">
             <strong>{TYPE[g.type]}</strong>
-            <input type="color" value={g.color} onChange={(e) => set(i, { color: e.target.value })} aria-label="가이드 색" />
+            <input type="color" value={g.color} onChange={(e) => set(i, { color: e.target.value })} aria-label={strings.guides.color} />
             <div className="spacer" />
-            <button className="icon-btn sm" aria-label={g.hidden ? "보이기" : "숨기기"} title={g.hidden ? "보이기" : "숨기기"} onClick={() => set(i, { hidden: !g.hidden || undefined })}>
+            <button className="icon-btn sm" aria-label={g.hidden ? strings.guides.show : strings.guides.hide} title={g.hidden ? strings.guides.show : strings.guides.hide} onClick={() => set(i, { hidden: !g.hidden || undefined })}>
               <Icon name={g.hidden ? "close" : "check"} size={14} />
             </button>
-            <button className="icon-btn sm danger" aria-label="가이드 삭제" title="삭제" onClick={() => onChange(guides.filter((_, j) => j !== i), "레이아웃 가이드 삭제")}>
+            <button className="icon-btn sm danger" aria-label={strings.guides.deleteGuide} title={strings.guides.delete} onClick={() => onChange(guides.filter((_, j) => j !== i), strings.history.deleteGuide)}>
               <Icon name="trash" size={14} />
             </button>
           </div>
           {g.type === "grid" ? (
             <div className="grid2">
-              <NumIn label="칸" value={g.size} onCommit={(v) => set(i, { size: Math.max(2, v) })} />
+              <NumIn label={strings.guides.cell} value={g.size} onCommit={(v) => set(i, { size: Math.max(2, v) })} />
             </div>
           ) : (
             <div className="grid2">
-              <NumIn label="개수" value={g.count} onCommit={(v) => set(i, { count: Math.max(1, Math.min(48, v)) })} />
-              <NumIn label="간격" value={g.gutter} onCommit={(v) => set(i, { gutter: v })} />
-              <NumIn label="여백" value={g.margin} onCommit={(v) => set(i, { margin: v })} />
-              {g.align !== "stretch" && <NumIn label="칸 크기" value={g.size} onCommit={(v) => set(i, { size: Math.max(1, v) })} />}
+              <NumIn label={strings.guides.count} value={g.count} onCommit={(v) => set(i, { count: Math.max(1, Math.min(48, v)) })} />
+              <NumIn label={strings.guides.gutter} value={g.gutter} onCommit={(v) => set(i, { gutter: v })} />
+              <NumIn label={strings.guides.margin} value={g.margin} onCommit={(v) => set(i, { margin: v })} />
+              {g.align !== "stretch" && <NumIn label={strings.guides.cellSize} value={g.size} onCommit={(v) => set(i, { size: Math.max(1, v) })} />}
               <label className="field-row span2">
-                <span>정렬</span>
-                <select value={g.align} onChange={(e) => set(i, { align: e.target.value as LayoutGuide["align"] })} aria-label="가이드 정렬">
-                  <option value="stretch">늘이기</option>
-                  <option value="start">{g.type === "columns" ? "왼쪽" : "위"}</option>
-                  <option value="center">가운데</option>
-                  <option value="end">{g.type === "columns" ? "오른쪽" : "아래"}</option>
+                <span>{strings.guides.align}</span>
+                <select value={g.align} onChange={(e) => set(i, { align: e.target.value as LayoutGuide["align"] })} aria-label={strings.guides.alignAria}>
+                  <option value="stretch">{strings.guides.stretch}</option>
+                  <option value="start">{g.type === "columns" ? strings.guides.left : strings.guides.top}</option>
+                  <option value="center">{strings.guides.center}</option>
+                  <option value="end">{g.type === "columns" ? strings.guides.right : strings.guides.bottom}</option>
                 </select>
               </label>
             </div>

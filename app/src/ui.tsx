@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { Icon, type IconName } from "./icons";
+import { strings } from "./strings";
 
 /* ---------------- 토스트 ---------------- */
 export type Toast = { id: number; text: string; tone?: "info" | "ok" | "error"; action?: { label: string; run: () => void } };
@@ -80,7 +81,7 @@ export function ContextMenu({ menu, onClose }: { menu: MenuState; onClose: () =>
       className="menu"
       role="menu"
       tabIndex={-1}
-      aria-label={menu.title ?? "메뉴"}
+      aria-label={menu.title ?? strings.dialog.menu}
       style={{ left: pos.x, top: pos.y }}
       onKeyDown={(e) => {
         if (e.key === "Escape") onClose();
@@ -185,7 +186,7 @@ export function Dialog({ state, onClose }: { state: DialogState; onClose: () => 
           <p>{state.body}</p>
         )}
         <div className="dialog-actions">
-          <button onClick={cancel}>취소</button>
+          <button onClick={cancel}>{strings.dialog.cancel}</button>
           <button ref={okRef} className={state.kind === "confirm" && state.danger ? "danger primary" : "primary"} onClick={ok}>
             {state.ok}
           </button>
@@ -199,7 +200,7 @@ export function Dialog({ state, onClose }: { state: DialogState; onClose: () => 
 export function useDialog() {
   const [state, setState] = useState<DialogState>(null);
   const prompt = (o: { title: string; label?: string; value?: string; hint?: string; ok?: string; extra?: { label: string; checked: boolean } }) =>
-    new Promise<{ value: string; extra: boolean } | null>((resolve) => setState({ kind: "prompt", value: o.value ?? "", ok: o.ok ?? "확인", ...o, resolve }));
-  const confirm = (o: { title: string; body: string; ok?: string; danger?: boolean }) => new Promise<boolean>((resolve) => setState({ kind: "confirm", ok: o.ok ?? "확인", ...o, resolve }));
+    new Promise<{ value: string; extra: boolean } | null>((resolve) => setState({ kind: "prompt", value: o.value ?? "", ok: o.ok ?? strings.dialog.ok, ...o, resolve }));
+  const confirm = (o: { title: string; body: string; ok?: string; danger?: boolean }) => new Promise<boolean>((resolve) => setState({ kind: "confirm", ok: o.ok ?? strings.dialog.ok, ...o, resolve }));
   return { state, close: () => setState(null), prompt, confirm };
 }

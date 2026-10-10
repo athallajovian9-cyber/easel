@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { api } from "./api";
+import { strings } from "./strings";
 
 type Node = { path: string; tag: string; cls?: string; text: string; children: Node[] };
 
@@ -121,7 +122,7 @@ export function Layers(props: { file: string; version: number; selected: string[
           <button
             className="twisty"
             tabIndex={-1}
-            aria-label={isOpen ? "접기" : "펼치기"}
+            aria-label={isOpen ? strings.layers.collapse : strings.layers.expand}
             style={{ visibility: has ? "visible" : "hidden" }}
             onClick={(e) => {
               e.stopPropagation();
@@ -141,9 +142,9 @@ export function Layers(props: { file: string; version: number; selected: string[
 
   return (
     <section className="layers">
-      <h3>레이어</h3>
-      <p className="muted small">끌어서 다른 항목 위에 놓으면 그 앞으로 옮겨요. Shift+클릭으로 여러 개(감싸기용). 목록을 누른 뒤 ↑↓ 이동, ←→ 접기·펼치기.</p>
-      <ul className="layer-tree" role="tree" aria-label="레이어" tabIndex={0} onKeyDown={onKey}>
+      <h3>{strings.layers.title}</h3>
+      <p className="muted small">{strings.layers.hint}</p>
+      <ul className="layer-tree" role="tree" aria-label={strings.layers.title} tabIndex={0} onKeyDown={onKey}>
         {tree.map((n) => row(n, 0))}
       </ul>
     </section>
