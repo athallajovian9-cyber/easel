@@ -97,6 +97,8 @@ async function appIsStale(distDir) {
       else newest = Math.max(newest, (await fs.stat(p)).mtimeMs);
     }
   };
+  // Installed from npm the app sources are not shipped, only the prebuilt dist/: never rebuild then
+  if (!existsSync(path.join(TOOL_ROOT, "app"))) return false;
   await walk(path.join(TOOL_ROOT, "app"));
   for (const f of ["vite.config.mjs", "package.json"]) newest = Math.max(newest, (await fs.stat(path.join(TOOL_ROOT, f))).mtimeMs);
   return newest > built.mtimeMs;

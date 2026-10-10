@@ -4,6 +4,7 @@
 
 **An infinite canvas for HTML screens. Your AI agent writes the designs; you see and tweak them live.**
 
+[![npm](https://img.shields.io/npm/v/easel-canvas.svg?color=black)](https://www.npmjs.com/package/easel-canvas)
 [![License: MIT](https://img.shields.io/badge/license-MIT-black.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A520-black.svg)](package.json)
 [![MCP](https://img.shields.io/badge/MCP-20%20tools-3E7BFA.svg)](#connect-your-ai-agent)
@@ -18,13 +19,18 @@ Easel turns a folder of plain HTML files into a design canvas. Claude Code or Co
 ## Try it in 30 seconds
 
 ```bash
-git clone https://github.com/nemodleo/easel.git
-cd easel
-npm install
-npm run demo        # opens the "Tidy" habit tracker demo at http://localhost:4317
+npx easel-canvas --demo
 ```
 
-Then open the **AI** tab (⌘J) and ask Claude Code or Codex for a change, or double-click a screen and start editing.
+That copies the "Tidy" habit tracker demo to `./easel-demo` and opens it at http://localhost:4317. Open the **AI** tab (⌘J) and ask Claude Code or Codex for a change, or double-click a screen and start editing.
+
+Already have HTML screens? Run it in your project:
+
+```bash
+npx easel-canvas                  # opens ./docs/design (or the current folder if it has screens/)
+npx easel-canvas --init           # starts a new ./docs/design with one screen
+npx easel-canvas --dir ./designs  # any folder of screens/*.html
+```
 
 ## Why Easel
 
@@ -63,22 +69,24 @@ Then open the **AI** tab (⌘J) and ask Claude Code or Codex for a change, or do
 
 ## Connect your AI agent
 
-Keep the canvas running (`npm run demo` or `npm start`). Agents write HTML files directly; the MCP server lets them **see** (`list_boards`, `read_board`, `screenshot`, `list_errors`), **know what you mean** (`get_selection` with the selected element, visible boards and the current page), **talk** (comments and replies) and **arrange** (`place_board`, `create_board`, notes, pages, `check_tokens`, `save_snapshot`).
+Keep the canvas running (`npx easel-canvas`). Agents write HTML files directly; the MCP server lets them **see** (`list_boards`, `read_board`, `screenshot`, `list_errors`), **know what you mean** (`get_selection` with the selected element, visible boards and the current page), **talk** (comments and replies) and **arrange** (`place_board`, `create_board`, notes, pages, `check_tokens`, `save_snapshot`).
 
 **Claude Code**: add `.mcp.json` to your project root:
 
 ```json
-{ "mcpServers": { "easel": { "type": "stdio", "command": "node", "args": ["tools/easel/bin/mcp.mjs", "--port", "4317"] } } }
+{ "mcpServers": { "easel": { "type": "stdio", "command": "npx", "args": ["-y", "-p", "easel-canvas", "easel-mcp", "--port", "4317"] } } }
 ```
 
 **Codex**: add to `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.easel]
-command = "node"
-args = ["<absolute path>/tools/easel/bin/mcp.mjs", "--port", "4317"]
+command = "npx"
+args = ["-y", "-p", "easel-canvas", "easel-mcp", "--port", "4317"]
 default_tools_approval_mode = "approve"  # the tools only view, comment and arrange
 ```
+
+Using Easel as a submodule (below)? Point `args` at `tools/easel/bin/mcp.mjs` with `"command": "node"` instead.
 
 Then try:
 
@@ -88,9 +96,9 @@ Then try:
 
 New files with `<meta name="board-size" content="390x844">` are placed on the canvas automatically at that size.
 
-## Add it to your project
+## Pin it in your project
 
-Easel is meant to live next to your code as a git submodule. With your designs in `<project>/docs/design/screens/`:
+`npx easel-canvas` is all most projects need. To pin an exact version for your team, add it as a dev dependency (`npm i -D easel-canvas`, then `"design": "easel-canvas"` in your scripts) or as a git submodule. With your designs in `<project>/docs/design/screens/`:
 
 ```bash
 git submodule add https://github.com/nemodleo/easel.git tools/easel
@@ -114,7 +122,6 @@ npm run design           # http://localhost:4317
 - It installs separately from your app, so it never touches your app's dependencies, build or deploy, and CI that skips submodules (the `actions/checkout` default) is unaffected.
 - To update: push to this repo, then run `git submodule update --remote tools/easel` in your project and commit the new pointer. Teammates run `npm run design:install` after `git pull`.
 
-Running it on any folder works too: `npm start -- --dir <design folder>`.
 
 <details>
 <summary><b>Keyboard shortcuts and how-tos</b></summary>
@@ -158,6 +165,7 @@ your-project/docs/design/
 npm test             # unit tests (source patching, board format, chat parsing, tokens…)
 npm run test:e2e     # Playwright end-to-end tests against test/fixtures/design
 npm run typecheck
+npm run demo         # run the repo's demo from source
 ```
 
 - `test/fixtures/design/` intentionally keeps Korean screen content and board titles: it mimics real user content and is needed to test Korean text input (IME) and rendering. Set `DESIGN_CANVAS_E2E_DIR=<folder>` to run the e2e tests against another design folder.

@@ -1,7 +1,6 @@
 {
   "name": "easel-canvas",
   "version": "0.1.0",
-  "private": true,
   "description": "Easel: an HTML design canvas for AI agents. Shows screens/*.html as boards and edits the source directly, with Claude Code / Codex via MCP",
   "license": "MIT",
   "author": "Hyun Park",
@@ -20,7 +19,9 @@
   },
   "scripts": {
     "start": "node bin/server.mjs",
-    "demo": "node bin/server.mjs --dir examples/demo",
+    "demo": "node bin/server.mjs --dir examples/demo --open",
+    "build": "vite build app --config vite.config.mjs",
+    "prepack": "npm run build",
     "mcp": "node bin/mcp.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --test test/*.test.mjs",
@@ -59,5 +60,13 @@
     "prototyping",
     "design-tool",
     "figma-alternative"
+  ],
+  "files": [
+    "bin/",
+    "server/",
+    "dist/",
+    "examples/demo/",
+    "README.md",
+    "LICENSE"
   ]
 }
