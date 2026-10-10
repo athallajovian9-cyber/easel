@@ -92,7 +92,7 @@ export function Layers(props: { file: string; version: number; selected: string[
           aria-selected={props.selected.includes(n.path)}
           aria-expanded={has ? !!isOpen : undefined}
           aria-level={depth + 1}
-          className={`layer ${props.selected.includes(n.path) ? "on" : ""} ${over === n.path ? "over" : ""} ${cur === n.path ? "focus" : ""}`}
+          className={`layer ${props.selected.includes(n.path) ? "on" : ""} ${over === n.path ? "over" : ""} ${cur === n.path ? "kbd-focus" : ""}`}
           style={{ paddingLeft: 4 + depth * 12 }}
           draggable
           onDragStart={(e) => {
