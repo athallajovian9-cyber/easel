@@ -7,7 +7,7 @@ import { test } from "node:test";
 
 import { writeAtomic } from "../server/fsutil.mjs";
 
-test("원자적 쓰기: 임시 파일을 남기지 않고 내용·권한을 바꾼다", async () => {
+test("atomic write: replaces content and keeps mode without leaving temp files", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "dc-"));
   const f = path.join(dir, "a.html");
   await fs.writeFile(f, "old");
@@ -18,7 +18,7 @@ test("원자적 쓰기: 임시 파일을 남기지 않고 내용·권한을 바�
   assert.deepEqual((await fs.readdir(dir)).filter((n) => n.startsWith(".dc-tmp")), []);
 });
 
-test("원자적 쓰기: 실패하면 원본이 그대로", async () => {
+test("atomic write: on failure the original stays as is", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "dc-"));
   const f = path.join(dir, "sub", "missing.html");
   await assert.rejects(writeAtomic(f, "x"));

@@ -11,7 +11,7 @@ import { formatBoard } from "../server/boardFormat.mjs";
 
 const REPO_BOARD = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "fixtures/board-sample.json");
 
-test("형식만 바뀌고 값은 같다, 보드 하나가 한 줄, 키 정렬", async () => {
+test("only the format changes, values stay equal; one board per line, sorted keys", async () => {
   const b = JSON.parse(await fs.readFile(REPO_BOARD, "utf8"));
   const text = formatBoard(b);
   assert.deepEqual(JSON.parse(text), JSON.parse(JSON.stringify(b)));
@@ -19,10 +19,10 @@ test("형식만 바뀌고 값은 같다, 보드 하나가 한 줄, 키 정렬", 
   assert.ok(lines.some((l) => l.startsWith('    "scr-01.html": {"x":')));
   const keys = lines.filter((l) => /^    "[^"]+\.html": \{/.test(l)).map((l) => l.trim().split('"')[1]);
   assert.deepEqual(keys, [...keys].sort());
-  assert.equal(formatBoard(JSON.parse(text)), text, "다시 써도 같다");
+  assert.equal(formatBoard(JSON.parse(text)), text, "rewriting gives the same text");
 });
 
-test("두 브랜치 병합: 서로 다른 보드 이동·메모 추가는 충돌 없음", async () => {
+test("merging two branches: moving different boards and adding notes do not conflict", async () => {
   const base = JSON.parse(await fs.readFile(REPO_BOARD, "utf8"));
   const d = await fs.mkdtemp(path.join(os.tmpdir(), "dc-merge-"));
   const w = async (name, fn) => {
@@ -32,9 +32,9 @@ test("두 브랜치 병합: 서로 다른 보드 이동·메모 추가는 충돌
   };
   await w("base", () => {});
   const cases = [
-    ["인접 보드 이동", (v) => (v.boards["scr-01.html"].x = 1500), (v) => (v.boards["scr-02.html"].x = 2400)],
-    ["메모 각각 추가", (v) => (v.notes.na = { kind: "sticky", x: 1, y: 1, text: "A", w: 100 }), (v) => (v.notes.tz = { kind: "sticky", x: 2, y: 2, text: "B", w: 100 })],
-    ["보드 이동 + 메모 추가", (v) => (v.boards["ds.html"].y = 1), (v) => (v.notes.nz = { kind: "title", x: 0, y: 0, text: "C" })],
+    ["move adjacent boards", (v) => (v.boards["scr-01.html"].x = 1500), (v) => (v.boards["scr-02.html"].x = 2400)],
+    ["add a note on each side", (v) => (v.notes.na = { kind: "sticky", x: 1, y: 1, text: "A", w: 100 }), (v) => (v.notes.tz = { kind: "sticky", x: 2, y: 2, text: "B", w: 100 })],
+    ["move a board + add a note", (v) => (v.boards["ds.html"].y = 1), (v) => (v.notes.nz = { kind: "title", x: 0, y: 0, text: "C" })],
   ];
   for (const [name, a, b] of cases) {
     await w("ours", a);
@@ -45,7 +45,7 @@ test("두 브랜치 병합: 서로 다른 보드 이동·메모 추가는 충돌
     } catch (e) {
       code = e.status;
     }
-    assert.equal(code, 0, `${name}: 충돌`);
+    assert.equal(code, 0, `${name}: conflict`);
     JSON.parse(await fs.readFile(path.join(d, "ours"), "utf8"));
   }
 });

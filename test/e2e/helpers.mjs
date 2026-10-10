@@ -1,5 +1,5 @@
 // AI-generated with Claude Code, 2026-10-09, reviewed by Hyun Park
-// e2e 공통: 디자인 폴더(기본 test/fixtures/design)를 임시 폴더에 복사해 서버를 따로 띄운다(원본은 건드리지 않음).
+// Shared e2e setup: copies the design folder (default test/fixtures/design) to a temp folder and starts a separate server (the original is untouched).
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import net from "node:net";
@@ -11,7 +11,7 @@ import { chromium } from "playwright";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const TOOL = path.resolve(here, "../..");
-// 시험용 디자인 폴더: 기본은 이 레포의 작은 fixture. 실제 프로젝트 폴더로 돌리려면 DESIGN_CANVAS_E2E_DIR=<docs/design>
+// Design folder for tests: defaults to the small fixture in this repo. To run against a real project folder, set DESIGN_CANVAS_E2E_DIR=<docs/design>
 export const REPO_DESIGN = process.env.DESIGN_CANVAS_E2E_DIR ? path.resolve(process.env.DESIGN_CANVAS_E2E_DIR) : path.resolve(TOOL, "test/fixtures/design");
 
 const freePort = () =>
@@ -69,7 +69,7 @@ export async function startEnv() {
 
 export const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** 보드 하나를 크게 보고 편집 모드로 */
+/** Zooms to one board and optionally enters edit mode */
 export async function openBoard(page, url, file, { edit = false } = {}) {
   if (!page.url().startsWith(url)) {
     await page.goto(url);
@@ -79,7 +79,7 @@ export async function openBoard(page, url, file, { edit = false } = {}) {
     document.querySelector(`.board[data-file="${f}"] .board-frame`).dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 1 }));
   }, file);
   await wait(100);
-  await page.keyboard.press("Shift+Digit2"); // 선택한 보드로 이동
+  await page.keyboard.press("Shift+Digit2"); // Zoom to the selected board
   await page.waitForSelector(`.board[data-file="${file}"] iframe`);
   await wait(600);
   if (edit) {

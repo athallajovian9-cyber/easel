@@ -7,7 +7,7 @@ import { test } from "node:test";
 
 import { createDeps } from "../server/deps.mjs";
 
-test("끼운 보드: 직접·간접으로 끼운 화면을 찾는다", async () => {
+test("embedded boards: finds screens embedded directly and indirectly", async () => {
   const d = await fs.mkdtemp(path.join(os.tmpdir(), "dc-"));
   await fs.writeFile(path.join(d, "a.html"), "<p>a</p>");
   await fs.writeFile(path.join(d, "flow.html"), '<iframe src="a.html"></iframe><iframe src="b.html?x=1"></iframe>');
