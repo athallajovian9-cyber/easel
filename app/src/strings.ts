@@ -9,7 +9,7 @@ const variantsLabel = (n: number) => plural(n, "variant", "variants");
 export const strings = {
   app: {
     /** Same text as <title> in app/index.html (static, so kept in sync by hand) */
-    title: "Design canvas",
+    title: "Easel",
     loadFailed: "Couldn't load:",
     retry: "Try again",
     loadingBoards: "Loading boards…",

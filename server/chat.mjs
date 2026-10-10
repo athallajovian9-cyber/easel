@@ -18,7 +18,7 @@ function agentCommand(agent, { prompt, resume, root, images }) {
   }
   return {
     cmd: "claude",
-    args: ["-p", prompt, "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--permission-mode", "acceptEdits", "--allowedTools", "mcp__design-canvas", ...(resume ? ["--resume", resume] : [])],
+    args: ["-p", prompt, "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--permission-mode", "acceptEdits", "--allowedTools", "mcp__easel", "mcp__design-canvas", ...(resume ? ["--resume", resume] : [])],
   };
 }
 

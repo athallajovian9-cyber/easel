@@ -1,6 +1,6 @@
 <div align="center">
 
-# design-canvas
+# Easel
 
 **An infinite canvas for HTML screens. Your AI agent writes the designs; you see and tweak them live.**
 
@@ -9,24 +9,24 @@
 [![MCP](https://img.shields.io/badge/MCP-20%20tools-3E7BFA.svg)](#connect-your-ai-agent)
 [![Works with](https://img.shields.io/badge/works%20with-Claude%20Code%20·%20Codex-3E7BFA.svg)](#connect-your-ai-agent)
 
-<img src="docs/screenshots/overview.png" alt="design-canvas showing a habit tracker app: five mobile screens on an infinite canvas with notes, flow arrows, a board list and a properties panel with token and accessibility checks" width="100%">
+<img src="docs/screenshots/overview.png" alt="Easel showing a habit tracker app: five mobile screens on an infinite canvas with notes, flow arrows, a board list and a properties panel with token and accessibility checks" width="100%">
 
 </div>
 
-design-canvas turns a folder of plain HTML files into a design canvas. Claude Code or Codex writes a screen, and it shows up on the canvas a moment later. Drag, resize, retype or restyle anything on the canvas, and **only that part of the source file changes**. There is no export step and no proprietary file format: your designs stay in your repo as HTML and merge with git like any other code.
+Easel turns a folder of plain HTML files into a design canvas. Claude Code or Codex writes a screen, and it shows up on the canvas a moment later. Drag, resize, retype or restyle anything on the canvas, and **only that part of the source file changes**. There is no export step and no proprietary file format: your designs stay in your repo as HTML and merge with git like any other code.
 
 ## Try it in 30 seconds
 
 ```bash
-git clone https://github.com/nemodleo/design-canvas.git
-cd design-canvas
+git clone https://github.com/nemodleo/easel.git
+cd easel
 npm install
 npm run demo        # opens the "Tidy" habit tracker demo at http://localhost:4317
 ```
 
 Then open the **AI** tab (⌘J) and ask Claude Code or Codex for a change, or double-click a screen and start editing.
 
-## Why design-canvas
+## Why Easel
 
 - **HTML is the source of truth.** Each `screens/*.html` file is one board. What you see is exactly what ships to the browser, and there's nothing to export or keep in sync.
 - **Built for AI agents.** An MCP server with 20 tools lets agents see the boards, read what you selected, leave comments, check tokens and arrange the canvas. An in-app chat runs `claude -p` or `codex exec` with your selection as context.
@@ -68,15 +68,15 @@ Keep the canvas running (`npm run demo` or `npm start`). Agents write HTML files
 **Claude Code**: add `.mcp.json` to your project root:
 
 ```json
-{ "mcpServers": { "design-canvas": { "type": "stdio", "command": "node", "args": ["tools/design-canvas/bin/mcp.mjs", "--port", "4317"] } } }
+{ "mcpServers": { "easel": { "type": "stdio", "command": "node", "args": ["tools/easel/bin/mcp.mjs", "--port", "4317"] } } }
 ```
 
 **Codex**: add to `~/.codex/config.toml`:
 
 ```toml
-[mcp_servers.design-canvas]
+[mcp_servers.easel]
 command = "node"
-args = ["<absolute path>/tools/design-canvas/bin/mcp.mjs", "--port", "4317"]
+args = ["<absolute path>/tools/easel/bin/mcp.mjs", "--port", "4317"]
 default_tools_approval_mode = "approve"  # the tools only view, comment and arrange
 ```
 
@@ -90,17 +90,17 @@ New files with `<meta name="board-size" content="390x844">` are placed on the ca
 
 ## Add it to your project
 
-design-canvas is meant to live next to your code as a git submodule. With your designs in `<project>/docs/design/screens/`:
+Easel is meant to live next to your code as a git submodule. With your designs in `<project>/docs/design/screens/`:
 
 ```bash
-git submodule add https://github.com/nemodleo/design-canvas.git tools/design-canvas
+git submodule add https://github.com/nemodleo/easel.git tools/easel
 ```
 
 ```json
 {
   "scripts": {
-    "design:install": "git submodule update --init tools/design-canvas && npm --prefix tools/design-canvas install",
-    "design": "npm --prefix tools/design-canvas start"
+    "design:install": "git submodule update --init tools/easel && npm --prefix tools/easel install",
+    "design": "npm --prefix tools/easel start"
   }
 }
 ```
@@ -110,9 +110,9 @@ npm run design:install   # once: fetch the submodule and install
 npm run design           # http://localhost:4317
 ```
 
-- The default design folder is `../../docs/design` relative to the tool, so `tools/design-canvas` opens your `docs/design` with no flags. Anywhere else: `npm --prefix tools/design-canvas start -- --dir <design folder> --port <port>`.
+- The default design folder is `../../docs/design` relative to the tool, so `tools/easel` opens your `docs/design` with no flags. Anywhere else: `npm --prefix tools/easel start -- --dir <design folder> --port <port>`.
 - It installs separately from your app, so it never touches your app's dependencies, build or deploy, and CI that skips submodules (the `actions/checkout` default) is unaffected.
-- To update: push to this repo, then run `git submodule update --remote tools/design-canvas` in your project and commit the new pointer. Teammates run `npm run design:install` after `git pull`.
+- To update: push to this repo, then run `git submodule update --remote tools/easel` in your project and commit the new pointer. Teammates run `npm run design:install` after `git pull`.
 
 Running it on any folder works too: `npm start -- --dir <design folder>`.
 
@@ -170,7 +170,7 @@ npm run typecheck
 | `app/` | Canvas UI (Vite + React + TypeScript); all UI text lives in `app/src/strings.ts` |
 | `test/` | `node --test` unit tests and Playwright e2e tests |
 
-The project started as `tools/design-canvas` inside a [team project](https://github.com/snuhcs-course/swpp-2026-project-team-06) and moved here with its history. The original plan is in [PLAN.md](PLAN.md), a feature-by-feature comparison with Claude Design is in [PARITY.md](PARITY.md), and the work log is in [tasks.md](tasks.md).
+Easel was called **design-canvas** until October 2026 (old links redirect here). It started as `tools/design-canvas` inside a [team project](https://github.com/snuhcs-course/swpp-2026-project-team-06) and moved here with its history. The original plan is in [PLAN.md](PLAN.md), a feature-by-feature comparison with Claude Design is in [PARITY.md](PARITY.md), and the work log is in [tasks.md](tasks.md).
 
 Contributions are welcome: open an issue or a pull request.
 

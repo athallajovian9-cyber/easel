@@ -20,7 +20,7 @@ async function call(method, path, body) {
       body: body ? JSON.stringify(body) : undefined,
     });
   } catch {
-    throw new Error(`The design canvas app is not running. Start it with npm run design from the repo root (${BASE}).`);
+    throw new Error(`Easel is not running. Start it with npm run design from the repo root (${BASE}).`);
   }
   const text = await res.text();
   if (!res.ok) {
@@ -37,7 +37,7 @@ async function call(method, path, body) {
 const callJson = async (m, p, b) => JSON.parse(await call(m, p, b));
 const ok = (data) => ({ content: [{ type: "text", text: typeof data === "string" ? data : JSON.stringify(data, null, 2) }] });
 
-const server = new McpServer({ name: "design-canvas", version: "0.1.0" });
+const server = new McpServer({ name: "easel", version: "0.1.0" });
 
 server.registerTool(
   "list_boards",

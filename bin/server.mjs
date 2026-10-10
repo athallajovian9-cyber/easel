@@ -8,7 +8,7 @@ import { attach, closeBrowser, extraRoutes } from "../server/routes.mjs";
 const { dir, port } = parseArgs();
 const app = await createServer({ dir, port, dev: !process.argv.includes("--prod"), extraRoutes });
 await attach(app);
-console.log(`design-canvas: ${app.url}  (design folder ${dir})`);
+console.log(`Easel: ${app.url}  (design folder ${dir})`);
 
 for (const sig of ["SIGTERM", "SIGINT", "SIGHUP"])
   process.on(sig, async () => {
