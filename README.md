@@ -1,25 +1,55 @@
-# design-canvas — 로컬 디자인 캔버스 (DEV-26)
+# design-canvas — 로컬 디자인 캔버스
 
-디자인 작업용 도구다. `docs/design/screens/*.html` 파일 하나가 보드 하나다. 내보내기 단계는 없다.
+HTML 파일로 그리는 화면 디자인을 보드로 보여 주고, 캔버스에서 고친 내용을 원본 HTML에 직접 반영하는 로컬 도구다. Claude Code·Codex와 MCP·앱 안 채팅으로 연결된다. 내보내기 단계는 없다.
 
-- Claude Code·Codex가 HTML 파일을 쓰면 캔버스에 바로 보인다.
+- 디자인 폴더의 `screens/*.html` 파일 하나가 보드 하나다. AI가 HTML을 쓰면 캔버스에 바로 보인다.
 - 캔버스에서 고친 내용은 HTML 원본의 그 부분만 바뀐다. 파일 전체를 다시 쓰지 않아 서식이 그대로다.
-- 배치는 `docs/design/board.json`, 댓글은 `docs/design/comments.json`에 저장하고 git으로 공유한다.
+- 배치는 `board.json`, 댓글은 `comments.json`, 토큰은 `tokens.json`(등록했을 때)에 저장하고 git으로 공유한다.
 
-계획과 결정은 [PLAN.md](PLAN.md)에 있다.
+이 레포는 **독립 레포**다. 처음에는 [farmclub 팀 레포](https://github.com/snuhcs-course/swpp-2026-project-team-06)의 `tools/design-canvas`로 만들었고(DEV-26), 기록을 그대로 옮겨 왔다. 프로젝트에는 git 서브모듈로 넣어 쓴다. 계획과 결정은 [PLAN.md](PLAN.md), Claude Design 기본 기능과의 비교는 [PARITY.md](PARITY.md), 작업 기록은 [tasks.md](tasks.md).
 
-## 실행
+## 다른 프로젝트에 넣어 쓰기 (서브모듈)
 
-레포 루트에서:
+디자인 폴더가 `<프로젝트>/docs/design`(그 안에 `screens/`)일 때:
 
 ```bash
-npm run design:install   # 처음 한 번
+git submodule add https://github.com/nemodleo/design-canvas.git tools/design-canvas
+```
+
+프로젝트 루트 `package.json`에 스크립트를 둔다.
+
+```json
+{
+  "scripts": {
+    "design:install": "git submodule update --init tools/design-canvas && npm --prefix tools/design-canvas install",
+    "design": "npm --prefix tools/design-canvas start"
+  }
+}
+```
+
+```bash
+npm run design:install   # 처음 한 번(서브모듈 받기 + 설치)
 npm run design           # http://localhost:4317
 ```
 
-- 다른 디자인 폴더를 보려면 `npm --prefix tools/design-canvas start -- --dir <폴더> --port <포트>`.
-- 앱 workspaces(`apps/*`, `packages/*`)와 따로 설치되는 독립 패키지라 앱 설치·빌드·배포에 영향이 없다.
-- 스크린샷은 `playwright`가 쓴다. 내려받은 크로뮴이 없으면 설치된 Chrome을 쓴다. 둘 다 없으면 스크린샷만 안 된다. 결과는 `tools/design-canvas/.out/`(git 제외).
+- `--dir` 기본값은 **이 도구 폴더 기준 `../../docs/design`**이다. 서브모듈을 `tools/design-canvas`에 두면 프로젝트의 `docs/design`을 바로 연다. 다른 곳이면 `npm --prefix tools/design-canvas start -- --dir <디자인 폴더> --port <포트>`.
+- 프로젝트 앱과 따로 설치되는 독립 패키지라 앱 설치·빌드·배포에 영향이 없다. 서브모듈을 받지 않은 CI(`actions/checkout` 기본값)에도 영향이 없다.
+- 스크린샷·축소 미리보기는 `playwright`가 쓴다. 내려받은 크로뮴이 없으면 설치된 Chrome을 쓴다. 둘 다 없으면 그 기능만 안 된다.
+
+### 서브모듈 갱신
+
+1. 이 레포(nemodleo/design-canvas)에 고친 것을 push한다(도구를 고치려면 이 레포에 PR).
+2. 프로젝트에서 `git submodule update --remote tools/design-canvas`
+3. 바뀐 서브모듈 포인터를 커밋한다: `git add tools/design-canvas && git commit -m "chore: design-canvas 갱신"`
+
+팀원은 `git pull` 뒤 `git submodule update --init tools/design-canvas`(또는 `npm run design:install`)로 같은 커밋을 받는다.
+
+## 단독 실행
+
+```bash
+npm install
+npm start -- --dir <디자인 폴더>
+```
 
 ## 쓰는 법
 
@@ -48,7 +78,11 @@ Claude Design 기본 기능과의 비교·근거는 [PARITY.md](PARITY.md), 화�
 
 앱(`npm run design`)을 켜 둔 상태에서 쓴다. MCP는 보고(`list_boards`, `read_board`, `screenshot`, `list_errors`, `get_tokens`, `check_tokens`), 지목하고(`get_selection`, 댓글·답글), 캔버스를 정리한다(`place_board`, `create_board`, 메모·페이지, `save_snapshot`). HTML은 에이전트가 파일을 직접 쓴다. 앱 안 채팅(⌘J)은 같은 에이전트를 `claude -p`·`codex exec`로 띄운다.
 
-- **Claude Code**: 레포의 `.mcp.json`에 들어 있다. 레포에서 Claude Code를 열면 `design-canvas` 서버 사용을 한 번 승인한다.
+- **Claude Code**: 프로젝트 루트 `.mcp.json`에 둔다. 프로젝트에서 Claude Code를 열면 `design-canvas` 서버 사용을 한 번 승인한다.
+
+  ```json
+  { "mcpServers": { "design-canvas": { "type": "stdio", "command": "node", "args": ["tools/design-canvas/bin/mcp.mjs", "--port", "4317"] } } }
+  ```
 - **Codex**: 각자 `~/.codex/config.toml`에 한 번 등록한다.
 
   ```toml
@@ -62,6 +96,8 @@ Claude Design 기본 기능과의 비교·근거는 [PARITY.md](PARITY.md), 화�
 예시 요청: "캔버스에서 선택한 것 고쳐: 글자를 '농가에 문의 보내기'로", "새 화면 scr-34.html 만들어(390×844)". 새 HTML은 `<meta name="board-size" content="390x844">`가 있으면 그 크기로 "새 화면" 줄에 자동 배치되고, `place_board`로 제목·위치를 정할 수 있다.
 
 ## 개발
+
+- `npm test`(단위), `npm run test:e2e`(Playwright, 기본은 `test/fixtures/design`의 작은 폴더. 실제 폴더로 돌리려면 `DESIGN_CANVAS_E2E_DIR=<docs/design>`).
 
 ```bash
 npm --prefix tools/design-canvas test        # 원본 패치 단위 테스트

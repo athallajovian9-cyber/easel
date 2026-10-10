@@ -1,5 +1,5 @@
 // AI-generated with Claude Code, 2026-10-09, reviewed by Hyun Park
-// e2e 공통: docs/design을 임시 폴더에 복사해 서버를 따로 띄운다(레포 파일은 건드리지 않음).
+// e2e 공통: 디자인 폴더(기본 test/fixtures/design)를 임시 폴더에 복사해 서버를 따로 띄운다(원본은 건드리지 않음).
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import net from "node:net";
@@ -11,7 +11,8 @@ import { chromium } from "playwright";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const TOOL = path.resolve(here, "../..");
-export const REPO_DESIGN = path.resolve(TOOL, "../../docs/design");
+// 시험용 디자인 폴더: 기본은 이 레포의 작은 fixture. 실제 프로젝트 폴더로 돌리려면 DESIGN_CANVAS_E2E_DIR=<docs/design>
+export const REPO_DESIGN = process.env.DESIGN_CANVAS_E2E_DIR ? path.resolve(process.env.DESIGN_CANVAS_E2E_DIR) : path.resolve(TOOL, "test/fixtures/design");
 
 const freePort = () =>
   new Promise((r) => {

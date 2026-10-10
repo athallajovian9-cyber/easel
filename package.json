@@ -2,7 +2,17 @@
   "name": "design-canvas",
   "version": "0.1.0",
   "private": true,
-  "description": "로컬 디자인 캔버스: docs/design/screens/*.html을 보드로 보여주고 원본을 직접 고친다 (DEV-26)",
+  "description": "Local design canvas for HTML boards: shows docs/design/screens/*.html as boards and edits the source directly, with Claude Code / Codex MCP",
+  "license": "MIT",
+  "author": "Hyun Park",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nemodleo/design-canvas.git"
+  },
+  "homepage": "https://github.com/nemodleo/design-canvas#readme",
+  "bugs": {
+    "url": "https://github.com/nemodleo/design-canvas/issues"
+  },
   "type": "module",
   "bin": {
     "design-canvas": "bin/server.mjs",

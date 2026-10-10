@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "title": "fixture",
+  "pages": [],
+  "boards": {
+    "f-3.html": {"x":1410,"y":0,"w":800,"h":900,"title":"F-3 흐름"},
+
+    "scr-02.html": {"x":0,"y":0,"w":390,"h":844,"title":"SCR-02 농가 목록"},
+
+    "scr-15.html": {"x":470,"y":0,"w":390,"h":844,"title":"SCR-15 채팅 목록"},
+
+    "scr-32.html": {"x":940,"y":0,"w":390,"h":844,"title":"SCR-32 문의"}
+  },
+  "order": ["scr-02.html", "scr-15.html", "scr-32.html", "f-3.html"],
+  "notes": {}
+}

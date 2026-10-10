@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 import { formatBoard } from "../server/boardFormat.mjs";
 
-const REPO_BOARD = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../docs/design/board.json");
+const REPO_BOARD = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "fixtures/board-sample.json");
 
 test("형식만 바뀌고 값은 같다, 보드 하나가 한 줄, 키 정렬", async () => {
   const b = JSON.parse(await fs.readFile(REPO_BOARD, "utf8"));
