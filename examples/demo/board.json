@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "title": "Tidy — habit tracker",
+  "pages": [],
+  "boards": {
+    "empty.html": {"x":0,"y":1140,"w":390,"h":844,"title":"Empty state","radius":36},
+
+    "habit.html": {"x":470,"y":0,"w":390,"h":844,"title":"Habit detail","radius":36},
+
+    "home.html": {"x":0,"y":0,"w":390,"h":844,"title":"Today","is_interactive":true,"radius":36},
+
+    "landing.html": {"x":470,"y":1140,"w":1280,"h":800,"title":"Landing (desktop)"},
+
+    "new-habit.html": {"x":940,"y":0,"w":390,"h":844,"title":"New habit","radius":36},
+
+    "settings.html": {"x":1880,"y":0,"w":390,"h":844,"title":"Settings","radius":36},
+
+    "stats.html": {"x":1410,"y":0,"w":390,"h":844,"title":"Stats","radius":36}
+  },
+  "order": [
+    "home.html",
+    "habit.html",
+    "new-habit.html",
+    "stats.html",
+    "settings.html",
+    "empty.html",
+    "landing.html"
+  ],
+  "notes": {
+    "n1": {"kind":"title","x":0,"y":-260,"maxW":2400,"text":"Tidy — habit tracker"},
+
+    "n2": {"kind":"sticky","x":2350,"y":0,"w":360,"text":"Check-in should be one tap from Today.\nKeep the streak visible.","color":"yellow"},
+
+    "n3": {"kind":"sticky","x":2350,"y":300,"w":360,"text":"Stats: compare with last week, not with other people.","color":"blue"},
+
+    "n4": {"kind":"title","x":0,"y":880,"maxW":2400,"text":"Onboarding & marketing","size":48}
+  },
+  "shapes": {
+    "s1": {"kind":"arrow","x":400,"y":300,"w":60,"h":0,"points":[[0,0],[60,0]],"stroke":"#3E7BFA","strokeWidth":6,"z":1},
+
+    "s2": {"kind":"arrow","x":870,"y":300,"w":60,"h":0,"points":[[0,0],[60,0]],"stroke":"#3E7BFA","strokeWidth":6,"z":2}
+  }
+}

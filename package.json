@@ -20,6 +20,7 @@
   },
   "scripts": {
     "start": "node bin/server.mjs",
+    "demo": "node bin/server.mjs --dir examples/demo",
     "mcp": "node bin/mcp.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --test test/*.test.mjs",
@@ -46,5 +47,17 @@
     "react-dom": "^19.1.0",
     "typescript": "^5.8.3",
     "vite": "^6.3.5"
-  }
+  },
+  "keywords": [
+    "design",
+    "canvas",
+    "html",
+    "mcp",
+    "claude-code",
+    "codex",
+    "ai",
+    "prototyping",
+    "design-tool",
+    "figma-alternative"
+  ]
 }

@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "id": "c1",
+      "file": "home.html",
+      "path": "0/3",
+      "text": "Can we show progress as a ring here instead of text?",
+      "author": "Alex",
+      "createdAt": "2026-10-10T09:00:00.000Z",
+      "resolved": false,
+      "replies": [
+        {
+          "id": "r1",
+          "author": "Sam",
+          "text": "Trying it in the Stats board first.",
+          "createdAt": "2026-10-10T09:20:00.000Z"
+        }
+      ]
+    }
+  ]
+}
