@@ -1,6 +1,6 @@
 // AI-generated with Claude Code, 2026-10-09, reviewed by Hyun Park
-// 원본 HTML에서 요소 경로·원본 구간·해시를 찾는다. PLAN.md 3장.
-// 경로: <body>의 자식 요소부터, 요소 자식만 센 인덱스를 "/"로 잇는다. 브라우저 DOM과 같은 규칙.
+// Finds element paths, source ranges and hashes in the source HTML. PLAN.md ch. 3.
+// Path: starting from the children of <body>, indexes counting element children only, joined with "/". Same rule as the browser DOM.
 import crypto from "node:crypto";
 
 import { parse } from "parse5";
@@ -17,7 +17,7 @@ export function findBody(doc) {
   return html?.childNodes.find((n) => n.tagName === "body") ?? null;
 }
 
-/** "0/1/3" → 요소 노드(없으면 null) */
+/** "0/1/3" → element node (null if none) */
 export function nodeAtPath(doc, path) {
   let node = findBody(doc);
   if (!node) return null;
@@ -31,7 +31,7 @@ export function nodeAtPath(doc, path) {
   return node;
 }
 
-/** 요소의 원본 구간 [start, end) */
+/** Source range of the element [start, end) */
 export function rangeOf(node) {
   const loc = node.sourceCodeLocation;
   if (!loc) return null;
@@ -40,7 +40,7 @@ export function rangeOf(node) {
 
 export const hashText = (s) => crypto.createHash("sha1").update(s).digest("hex").slice(0, 12);
 
-/** 경로의 요소 정보: 원본 outerHTML, 해시, 태그, 텍스트 */
+/** Element info for a path: source outerHTML, hash, tag, text */
 export function inspect(html, path) {
   const doc = parseHtml(html);
   const node = nodeAtPath(doc, path);
@@ -57,7 +57,7 @@ export function textOf(node) {
   return (node.childNodes ?? []).map(textOf).join("");
 }
 
-/** 레이어 목록용 트리(깊이 제한) */
+/** Tree for the layers list (depth-limited) */
 export function outline(html, maxDepth = 12) {
   const doc = parseHtml(html);
   const body = findBody(doc);

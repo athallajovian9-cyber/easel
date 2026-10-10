@@ -1,5 +1,5 @@
 // AI-generated with Claude Code, 2026-10-09, reviewed by Hyun Park
-// 마일스톤별로 붙는 추가 API와 감시기. createServer의 extraRoutes로 들어간다. PLAN.md 4장.
+// Extra APIs and the watcher added per milestone. Passed to createServer as extraRoutes. PLAN.md ch. 4.
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -24,15 +24,15 @@ async function writeScreen(ctx, p, html) {
 
 async function readScreen(ctx, file) {
   const p = safeJoin(ctx.store.screensDir, file ?? "");
-  if (!p || !String(file).endsWith(".html")) throw Object.assign(new Error("잘못된 파일"), { status: 400 });
+  if (!p || !String(file).endsWith(".html")) throw Object.assign(new Error("Invalid file"), { status: 400 });
   try {
     return { p, html: await fs.readFile(p, "utf8") };
   } catch {
-    throw Object.assign(new Error("파일이 없어요"), { status: 404 });
+    throw Object.assign(new Error("File not found"), { status: 404 });
   }
 }
 
-/* ---------- 댓글 (docs/design/comments.json) ---------- */
+/* ---------- Comments (docs/design/comments.json) ---------- */
 async function readComments(ctx) {
   try {
     const d = JSON.parse(await fs.readFile(path.join(ctx.dir, "comments.json"), "utf8"));
@@ -46,9 +46,9 @@ async function writeComments(ctx, comments) {
   ctx.broadcast({ type: "comments-changed" });
 }
 
-/* ---------- 스크린샷 (playwright가 있으면) ---------- */
+/* ---------- Screenshots (when playwright is available) ---------- */
 let browserPromise = null;
-/** 서버가 끝날 때 스크린샷·미리보기용 크로뮴도 닫는다(남으면 고아 프로세스가 됨) */
+/** Close the Chromium used for screenshots/thumbnails when the server stops (otherwise it becomes an orphan process) */
 export async function closeBrowser() {
   const b = await browserPromise?.catch(() => null);
   browserPromise = null;
@@ -59,9 +59,9 @@ async function getBrowser() {
   if (!browserPromise) {
     browserPromise = (async () => {
       const { chromium } = await import("playwright").catch(() => {
-        throw Object.assign(new Error("playwright가 없어 스크린샷을 쓸 수 없어요(npm run design:install)"), { status: 501 });
+        throw Object.assign(new Error("Screenshots are unavailable because playwright is not installed (npm run design:install)"), { status: 501 });
       });
-      // 내려받은 크로뮴이 없으면 설치된 Chrome을 쓴다
+      // Fall back to the installed Chrome if no downloaded Chromium exists
       return chromium.launch().catch(() => chromium.launch({ channel: "chrome" }));
     })();
     browserPromise.catch(() => (browserPromise = null));
@@ -69,7 +69,7 @@ async function getBrowser() {
   return browserPromise;
 }
 
-/** 미리보기 만들기는 두 개씩만 */
+/** Generate at most two thumbnails at a time */
 let running = 0;
 const waiting = [];
 function thumbQueue(job) {
@@ -107,7 +107,7 @@ export async function screenshot(ctx, port, file, elPath) {
         return n;
       }, elPath);
       const el = handle.asElement();
-      if (!el) throw Object.assign(new Error("요소를 찾을 수 없어요"), { status: 404 });
+      if (!el) throw Object.assign(new Error("Element not found"), { status: 404 });
       await el.screenshot({ path: out });
     } else {
       await page.screenshot({ path: out, fullPage: true });
@@ -139,7 +139,7 @@ export const extraRoutes = [
       sendJson(res, 200, { ok: true, changed: true });
     },
   ],
-  // 예전 경로: 시간순 기록으로 넘긴다
+  // Legacy route: forwards to the chronological history
   ...["undo", "redo"].map((kind) => [
     "POST",
     `/api/${kind}`,
@@ -152,7 +152,7 @@ export const extraRoutes = [
   ...boardRoutes(),
   ...chat.routes,
   ...tokenRoutes(),
-  // 축소 미리보기: 25% 아래에서 빈 틀 대신 보여 줄 작은 그림. docs/design/.thumbs/(gitignore)에 수정 시각별로 저장
+  // Zoomed-out thumbnails: small images shown below 25% instead of empty frames. Stored per modification time in docs/design/.thumbs/ (gitignored)
   [
     "GET",
     "/api/thumb",
@@ -160,7 +160,7 @@ export const extraRoutes = [
       const f = url.searchParams.get("f") ?? "";
       const src = safeJoin(ctx.store.screensDir, f);
       const st = src && (await fs.stat(src).catch(() => null));
-      if (!st) return sendJson(res, 404, { error: "파일이 없어요" });
+      if (!st) return sendJson(res, 404, { error: "File not found" });
       const dir = path.join(ctx.dir, ".thumbs");
       const out = path.join(dir, `${f.replace(/[\\/]/g, "_")}.${Math.round(st.mtimeMs)}.jpg`);
       let buf = await fs.readFile(out).catch(() => null);
@@ -177,7 +177,7 @@ export const extraRoutes = [
             await page.goto(`http://127.0.0.1:${req.socket.localPort}/screens/${encodeURI(f)}`, { waitUntil: "load", timeout: 15000 });
             await page.waitForTimeout(150);
             const b = await page.screenshot({ type: "jpeg", quality: 70 });
-            // 옛 미리보기는 지운다
+            // Remove old thumbnails
             for (const n of await fs.readdir(dir)) if (n.startsWith(f.replace(/[\\/]/g, "_") + ".") && path.join(dir, n) !== out) await fs.rm(path.join(dir, n), { force: true });
             await fs.writeFile(out, b);
             return b;
@@ -191,7 +191,7 @@ export const extraRoutes = [
     },
   ],
   ...snapshotRoutes(),
-  // 자산 보관함: docs/design/assets/ 목록과 올리기(이미지·폰트). 화면에서는 ../assets/<이름>으로 쓴다
+  // Assets: list and upload docs/design/assets/ (images, fonts). Screens reference them as ../assets/<name>
   [
     "GET",
     "/api/assets",
@@ -212,7 +212,7 @@ export const extraRoutes = [
     async (req, res, url, ctx) => {
       const b = await readBody(req, 30 * 1024 * 1024);
       const base = String(b.name ?? "").replace(/[^\w.-]+/g, "-").replace(/^-+/, "").toLowerCase();
-      if (!/\.(png|jpe?g|gif|webp|svg|avif|woff2?|ttf|otf)$/i.test(base)) return sendJson(res, 400, { error: "이미지(png·jpg·gif·webp·svg·avif)나 폰트(woff2·woff·ttf·otf)만 올릴 수 있어요" });
+      if (!/\.(png|jpe?g|gif|webp|svg|avif|woff2?|ttf|otf)$/i.test(base)) return sendJson(res, 400, { error: "Only images (png, jpg, gif, webp, svg, avif) or fonts (woff2, woff, ttf, otf) can be uploaded" });
       const dir = path.join(ctx.dir, "assets");
       await fs.mkdir(dir, { recursive: true });
       const stem = base.replace(/\.[^.]+$/, "");
@@ -230,7 +230,7 @@ export const extraRoutes = [
     async (req, res, url, ctx) => {
       const { html } = await readScreen(ctx, url.searchParams.get("f"));
       const info = inspect(html, url.searchParams.get("path") ?? "");
-      if (!info) return sendJson(res, 404, { error: "요소가 없어요(파일이 바뀜, 다시 선택)" });
+      if (!info) return sendJson(res, 404, { error: "Element not found (the file changed, select again)" });
       sendJson(res, 200, { hash: info.hash, tag: info.tag, text: info.text.slice(0, 200), source: url.searchParams.get("full") ? info.source : info.source.slice(0, OUTER_LIMIT) });
     },
   ],
@@ -246,11 +246,11 @@ export const extraRoutes = [
     "GET",
     "/api/selection",
     async (req, res, url, ctx) => {
-      // 선택 + 캔버스 상태(모드·페이지·보이는/선택한 보드·저장 대기·최근 편집) + 오류 보드
+      // Selection + canvas state (mode, page, visible/selected boards, pending saves, recent edits) + errored boards
       const c = chat.state.context ?? {};
       const { missing } = await ctx.store.syncBoard();
       const errored = { ...chat.state.errors };
-      for (const f of missing) errored[f] = [{ kind: "missing", message: "파일이 없어요" }];
+      for (const f of missing) errored[f] = [{ kind: "missing", message: "File not found" }];
       sendJson(res, 200, {
         selection,
         mode: c.mode ?? null,
@@ -275,7 +275,7 @@ export const extraRoutes = [
       } else {
         const { html } = await readScreen(ctx, body.file);
         const info = inspect(html, body.path);
-        if (!info) return sendJson(res, 409, { error: "파일이 바뀜, 다시 선택" });
+        if (!info) return sendJson(res, 409, { error: "The file changed, select again" });
         selection = {
           file: body.file,
           path: body.path,
@@ -313,8 +313,8 @@ export const extraRoutes = [
       const list = await readComments(ctx);
       if (b.action === "reply") {
         const c = list.find((x) => x.id === b.id);
-        if (!c) return sendJson(res, 404, { error: "댓글이 없어요" });
-        if (!String(b.text ?? "").trim()) return sendJson(res, 400, { error: "text가 필요해요" });
+        if (!c) return sendJson(res, 404, { error: "Comment not found" });
+        if (!String(b.text ?? "").trim()) return sendJson(res, 400, { error: "text is required" });
         const r = { id: `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, author: b.author ?? process.env.USER ?? "unknown", text: String(b.text).trim(), createdAt: new Date().toISOString() };
         c.replies = [...(c.replies ?? []), r];
         if (b.resolve) c.resolved = true;
@@ -324,12 +324,12 @@ export const extraRoutes = [
       }
       if (b.action === "resolve") {
         const c = list.find((x) => x.id === b.id);
-        if (!c) return sendJson(res, 404, { error: "댓글이 없어요" });
+        if (!c) return sendJson(res, 404, { error: "Comment not found" });
         c.resolved = b.resolved ?? true;
         await writeComments(ctx, list);
         return sendJson(res, 200, { comment: c });
       }
-      if (!b.file || !String(b.text ?? "").trim()) return sendJson(res, 400, { error: "file과 text가 필요해요" });
+      if (!b.file || !String(b.text ?? "").trim()) return sendJson(res, 400, { error: "file and text are required" });
       const c = {
         id: `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`,
         file: b.file,
@@ -378,7 +378,7 @@ export const extraRoutes = [
   ],
 ];
 
-/** 서버가 뜬 뒤 붙일 것(파일 감시 등) */
+/** Things to attach after the server starts (file watching etc.) */
 export async function attach(app) {
   const stop = watchDesign(app.ctx);
   const close = app.close;

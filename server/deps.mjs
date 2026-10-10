@@ -1,12 +1,12 @@
 // AI-generated with Claude Code, 2026-10-09, reviewed by Hyun Park
-// 끼운 보드 관계: 어느 화면이 어느 화면을 iframe(또는 dc-import 대응)으로 넣었는지. 원본이 바뀌면 끼운 쪽도 다시 그린다.
+// Embedded board relations: which screen embeds which screen via iframe (or dc-import). When the source changes, the embedding screen is redrawn too.
 import fs from "node:fs/promises";
 import path from "node:path";
 
 const IFRAME_SRC = /<iframe\b[^>]*?\bsrc\s*=\s*["']([^"'#?]+\.html)/gi;
 
 export function createDeps(screensDir) {
-  const embeds = new Map(); // 끼운 파일 → Set(끼운 원본 파일)
+  const embeds = new Map(); // embedding file → Set(embedded source files)
 
   const refsOf = (file, html) => {
     const out = new Set();
@@ -29,7 +29,7 @@ export function createDeps(screensDir) {
     await Promise.all(files.map(update));
   }
 
-  /** file을 (직접·간접으로) 끼운 화면들 */
+  /** Screens that embed file (directly or indirectly) */
   function dependents(file) {
     const out = new Set();
     const queue = [file];

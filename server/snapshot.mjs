@@ -1,6 +1,6 @@
 // AI-generated with Claude Code, 2026-10-09, reviewed by Hyun Park
-// 버전 대신 git 스냅숏: 디자인 폴더만 커밋하고(작성자는 git 설정 그대로), 최근 스냅숏 목록을 보여 준다.
-// 되돌리기는 하지 않는다(git으로 직접). 다른 파일이 스테이징돼 있으면 섞이지 않게 디자인 폴더 경로만 커밋한다.
+// git snapshots instead of versions: commits only the design folder (author from git config) and lists recent snapshots.
+// No restore (use git directly). Commits only the design folder path so other staged files are not mixed in.
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -40,7 +40,7 @@ export function snapshotRoutes() {
       async (req, res, url, ctx) => {
         const root = await repoOf(ctx.dir);
         if (!root) return sendJson(res, 200, { git: false, snapshots: [], changed: 0 });
-        const rel = path.relative(root, await fs.realpath(ctx.dir)) || "."; // /var → /private/var 같은 링크를 풀고 비교
+        const rel = path.relative(root, await fs.realpath(ctx.dir)) || "."; // resolve links like /var → /private/var before comparing
         const log = await git(root, ["log", "-n", "15", "--format=%h%x09%an%x09%ar%x09%s", "--", rel]);
         const st = await git(root, ["status", "--porcelain", "--", rel]);
         const branch = (await git(root, ["branch", "--show-current"])).out.trim();
@@ -61,16 +61,16 @@ export function snapshotRoutes() {
       async (req, res, url, ctx) => {
         const b = await readBody(req);
         const root = await repoOf(ctx.dir);
-        if (!root) return sendJson(res, 400, { error: "디자인 폴더가 git 저장소 안에 있지 않아요" });
-        const rel = path.relative(root, await fs.realpath(ctx.dir)) || "."; // /var → /private/var 같은 링크를 풀고 비교
-        const msg = String(b.message ?? "").trim() || `디자인 스냅숏 ${new Date().toLocaleString("ko-KR")}`;
+        if (!root) return sendJson(res, 400, { error: "The design folder is not inside a git repository" });
+        const rel = path.relative(root, await fs.realpath(ctx.dir)) || "."; // resolve links like /var → /private/var before comparing
+        const msg = String(b.message ?? "").trim() || `design: snapshot ${new Date().toLocaleString("en-US")}`;
         const add = await git(root, ["add", "--", rel]);
-        if (add.code !== 0) return sendJson(res, 500, { error: add.err.trim() || "git add 실패" });
+        if (add.code !== 0) return sendJson(res, 500, { error: add.err.trim() || "git add failed" });
         const diff = await git(root, ["diff", "--cached", "--quiet", "--", rel]);
         if (diff.code === 0) return sendJson(res, 200, { ok: true, nothing: true });
-        // 디자인 폴더 경로만 커밋(다른 스테이징은 그대로 둔다). 훅도 그대로 돈다
+        // Commit only the design folder path (other staged changes stay as they are). Hooks still run
         const c = await git(root, ["commit", "-m", msg, "--", rel]);
-        if (c.code !== 0) return sendJson(res, 500, { error: (c.err || c.out).trim().split("\n").slice(-3).join("\n") || "git commit 실패" });
+        if (c.code !== 0) return sendJson(res, 500, { error: (c.err || c.out).trim().split("\n").slice(-3).join("\n") || "git commit failed" });
         const hash = (await git(root, ["rev-parse", "--short", "HEAD"])).out.trim();
         sendJson(res, 200, { ok: true, hash, message: msg });
       },

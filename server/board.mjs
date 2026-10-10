@@ -1,5 +1,5 @@
 // AI-generated with Claude Code, 2026-10-09, reviewed by Hyun Park
-// board.json(보드 배치·메모·페이지)과 screens/ 실제 파일 목록을 맞춘다. PLAN.md 2장.
+// Keeps board.json (board layout, notes, pages) in sync with the actual files under screens/. PLAN.md ch. 2.
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -36,14 +36,14 @@ export function createBoardStore(dir) {
   let writing = Promise.resolve();
   let lastWritten = null;
   async function writeBoard(board) {
-    // 직렬 저장: 동시에 두 요청이 와도 파일이 섞이지 않게 한다
+    // Serialized saves: two concurrent requests must not interleave their writes
     const text = formatBoard(board);
     lastWritten = text;
     writing = writing.then(() => writeAtomic(boardPath, text));
     await writing;
   }
 
-  /** screens/ 아래 .html 파일 목록(하위 폴더 포함, .icloud 자리표시 무시) */
+  /** .html files under screens/ (including subfolders, ignoring .icloud placeholders) */
   async function listScreenFiles() {
     const out = [];
     async function walk(rel) {
@@ -72,12 +72,12 @@ export function createBoardStore(dir) {
       const m = html.match(/<meta\s+name=["']board-size["']\s+content=["'](\d+)\s*[x×]\s*(\d+)["']/i);
       if (m) return { w: Number(m[1]), h: Number(m[2]) };
     } catch {
-      /* 읽을 수 없으면 기본 크기 */
+      /* unreadable: use the default size */
     }
     return { ...DEFAULT_SIZE };
   }
 
-  /** 새 화면 줄: 마지막으로 자동 배치한 보드 오른쪽, 없으면 전체 최하단 + 120 */
+  /** Row for new screens: right of the last auto-placed board, otherwise below everything + 120 */
   function placeNew(board, size) {
     const all = Object.values(board.boards);
     const auto = all.filter((b) => b.autoPlaced);
@@ -90,8 +90,8 @@ export function createBoardStore(dir) {
     return { x: left, y: bottom + GAP_Y, ...size };
   }
 
-  // 보드·파일을 바꾸는 요청과 자동 배치를 한 줄로 세운다. 실행 취소가 board.json을 쓰고 파일을 지우는 사이에
-  // 자동 배치가 끼어들면 지운 보드가 되살아난다.
+  // Queue board/file-changing requests and auto-placement in a single line. If auto-placement slipped in while an undo
+  // is writing board.json and deleting files, the deleted board would come back.
   let chain = Promise.resolve();
   function exclusive(fn) {
     const run = chain.then(fn, fn);
@@ -99,9 +99,9 @@ export function createBoardStore(dir) {
     return run;
   }
 
-  /** board.json에 없는 파일은 자동 배치해 기록하고, 결과와 누락·고아 목록을 돌려준다 */
+  /** Auto-places files missing from board.json, records them, and returns the result plus missing/orphan lists */
   const syncBoard = () => exclusive(syncBoardNow);
-  /** exclusive 안에서 부르는 판 */
+  /** Variant to call from inside exclusive */
   async function syncBoardNow() {
     const board = await readBoard();
     const files = await listScreenFiles();

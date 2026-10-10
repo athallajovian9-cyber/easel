@@ -6,7 +6,7 @@ reference/
 .env.*
 .DS_Store
 *.log
-# 시험이 만드는 임시 폴더(디자인 폴더 안)
+# Temporary folders created by tests (inside the design folder)
 .trash/
 .refs/
 .thumbs/

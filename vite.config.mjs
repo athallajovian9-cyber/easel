@@ -4,7 +4,7 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   plugins: [react()],
-  // 디자인 폴더의 /assets/(사진)와 겹치지 않게 앱 파일은 /_app/ 아래로
+  // App files go under /_app/ so they do not collide with the design folder's /assets/ (images)
   base: "/_app/",
   build: { outDir: "../dist", emptyOutDir: true },
 });

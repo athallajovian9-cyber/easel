@@ -1,6 +1,6 @@
 // AI-generated with Claude Code, 2026-10-09, reviewed by Hyun Park
-// 캔버스 안 채팅: claude -p / codex exec를 띄워 출력(JSONL)을 같은 모양의 이벤트로 바꿔 WS로 흘린다.
-// 선택·보이는 보드·댓글·참고 자료·오류를 맥락으로 붙이고, "N가지 안"이면 복사본을 먼저 나란히 만들어 둔다.
+// In-canvas chat: spawns claude -p / codex exec and turns their output (JSONL) into uniform events streamed over WS.
+// Attaches the selection, visible boards, comments, references and errors as context; for "N variants" it first creates copies side by side.
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -8,7 +8,7 @@ import path from "node:path";
 import { createBoards } from "./boards.mjs";
 import { readBody, sendJson } from "./index.mjs";
 
-/** 에이전트 실행 명령. 시험에서는 DESIGN_CANVAS_AGENT_CMD='{"claude":["node","fake.mjs"]}'로 바꾼다 */
+/** Agent launch command. Tests override it with DESIGN_CANVAS_AGENT_CMD='{"claude":["node","fake.mjs"]}' */
 function agentCommand(agent, { prompt, resume, root, images }) {
   const override = process.env.DESIGN_CANVAS_AGENT_CMD ? JSON.parse(process.env.DESIGN_CANVAS_AGENT_CMD)[agent] : null;
   if (override) return { cmd: override[0], args: [...override.slice(1), prompt] };
@@ -27,7 +27,7 @@ const short = (v, n = 120) => {
   return s.length > n ? s.slice(0, n) + "…" : s;
 };
 
-/** 에이전트 출력 한 줄 → 공통 이벤트 목록 */
+/** One line of agent output → list of common events */
 export function parseLine(agent, line, st) {
   let o;
   try {
@@ -41,12 +41,12 @@ export function parseLine(agent, line, st) {
     else if (o.type === "item.started" || o.type === "item.completed") {
       const it = o.item ?? {};
       if (it.type === "agent_message" && o.type === "item.completed") out.push({ kind: "text", text: it.text ?? "" });
-      else if (it.type === "command_execution" && o.type === "item.started") out.push({ kind: "tool", name: "명령", detail: short(it.command) });
-      else if (it.type === "file_change" && o.type === "item.completed") out.push({ kind: "tool", name: "파일 수정", detail: (it.changes ?? []).map((c) => c.path).join(", ") });
+      else if (it.type === "command_execution" && o.type === "item.started") out.push({ kind: "tool", name: "Command", detail: short(it.command) });
+      else if (it.type === "file_change" && o.type === "item.completed") out.push({ kind: "tool", name: "File change", detail: (it.changes ?? []).map((c) => c.path).join(", ") });
       else if (it.type === "mcp_tool_call" && o.type === "item.started") out.push({ kind: "tool", name: it.tool ?? "MCP", detail: short(it.arguments) });
       else if (it.type === "error" && !String(it.message).startsWith("Ignoring unknown")) out.push({ kind: "error", text: it.message });
     } else if (o.type === "turn.completed") out.push({ kind: "done", usage: o.usage });
-    else if (o.type === "turn.failed" || o.type === "error") out.push({ kind: "error", text: o.error?.message ?? o.message ?? "실패" });
+    else if (o.type === "turn.failed" || o.type === "error") out.push({ kind: "error", text: o.error?.message ?? o.message ?? "Failed" });
     return out;
   }
   // claude stream-json
@@ -64,29 +64,29 @@ export function parseLine(agent, line, st) {
   return out;
 }
 
-/** Windows shell 인자: 큰따옴표로 감싸고 안의 큰따옴표는 두 번 */
+/** Windows shell argument: wrap in double quotes and double any inner double quotes */
 export const winQuote = (a) => (/^[\w./:=-]+$/.test(a) ? a : `"${String(a).replace(/"/g, '""')}"`);
 
-/** 저장소 뿌리: docs/design이면 두 단계 위, 아니면(시험용 임시 폴더) 그 폴더 */
+/** Repo root: two levels up for docs/design, otherwise (temp folders in tests) the folder itself */
 const rootOf = (dir) => (dir.endsWith(path.join("docs", "design")) ? path.resolve(dir, "../..") : dir);
 
-/** 맥락 블록 */
+/** Context block */
 export async function buildPrompt(ctx, body, state) {
   const { board } = await ctx.store.syncBoard();
   const rel0 = path.relative(rootOf(ctx.dir), ctx.dir);
   const rel = rel0 || ".";
-  const lines = [`[디자인 캔버스 맥락]`, `- 디자인 폴더: ${rel} (화면은 ${rel0 ? rel0 + "/" : ""}screens/*.html, 캔버스 자리는 board.json)`];
+  const lines = [`[Design canvas context]`, `- Design folder: ${rel} (screens are ${rel0 ? rel0 + "/" : ""}screens/*.html, canvas positions are in board.json)`];
   const c = state.context;
   if (c) {
-    if (c.pageName) lines.push(`- 지금 페이지: ${c.pageName}`);
-    if (body.attach?.visible !== false && c.visibleArtboards?.length) lines.push(`- 화면에 보이는 보드: ${c.visibleArtboards.slice(0, 20).join(", ")}`);
+    if (c.pageName) lines.push(`- Current page: ${c.pageName}`);
+    if (body.attach?.visible !== false && c.visibleArtboards?.length) lines.push(`- Visible boards: ${c.visibleArtboards.slice(0, 20).join(", ")}`);
   }
   const boards = [...new Set(body.attach?.boards ?? [])];
-  if (boards.length) lines.push(`- 대상 보드: ${boards.map((f) => `${rel0 ? rel0 + "/" : ""}screens/${f} ("${board.boards[f]?.title ?? f}")`).join(", ")}`);
+  if (boards.length) lines.push(`- Target boards: ${boards.map((f) => `${rel0 ? rel0 + "/" : ""}screens/${f} ("${board.boards[f]?.title ?? f}")`).join(", ")}`);
   const sel = state.selection;
   if (body.attach?.selection !== false && sel) {
-    lines.push(`- 선택한 요소: ${rel0 ? rel0 + "/" : ""}screens/${sel.file} 경로 ${sel.path} <${sel.tag}>${sel.label ? ` "${sel.label}"` : ""}`);
-    lines.push("  원본 일부:\n" + sel.outerHTML.slice(0, 1200).replace(/^/gm, "    "));
+    lines.push(`- Selected element: ${rel0 ? rel0 + "/" : ""}screens/${sel.file} path ${sel.path} <${sel.tag}>${sel.label ? ` "${sel.label}"` : ""}`);
+    lines.push("  Source excerpt:\n" + sel.outerHTML.slice(0, 1200).replace(/^/gm, "    "));
   }
   const comments = body.attach?.comments ?? [];
   if (comments.length) {
@@ -94,28 +94,28 @@ export async function buildPrompt(ctx, body, state) {
     const all = Array.isArray(d.comments) ? d.comments : [];
     for (const id of comments) {
       const cm = all.find((x) => x.id === id);
-      if (cm) lines.push(`- 댓글(${cm.id}) ${rel0 ? rel0 + "/" : ""}screens/${cm.file}${cm.path ? ` 경로 ${cm.path}` : ""}: "${cm.text}" — 이 위치만 고치고, 끝나면 resolve_comment로 해결 처리`);
+      if (cm) lines.push(`- Comment (${cm.id}) ${rel0 ? rel0 + "/" : ""}screens/${cm.file}${cm.path ? ` path ${cm.path}` : ""}: "${cm.text}" — change only this location, then mark it resolved with resolve_comment`);
     }
   }
   for (const r of body.attach?.refs ?? []) {
-    if (r.kind === "url") lines.push(`- 참고 링크: ${r.value}`);
-    else lines.push(`- 참고 파일(${r.kind === "image" ? "이미지" : "문서"}): ${path.relative(rootOf(ctx.dir), path.join(ctx.dir, r.value))} — 읽어서 참고`);
+    if (r.kind === "url") lines.push(`- Reference link: ${r.value}`);
+    else lines.push(`- Reference file (${r.kind === "image" ? "image" : "document"}): ${path.relative(rootOf(ctx.dir), path.join(ctx.dir, r.value))} — read it for reference`);
   }
   const errs = Object.entries(state.errors).filter(([f]) => boards.includes(f));
-  for (const [f, list] of errs) lines.push(`- ${f} 오류: ${list[0].message}${list[0].line ? ` (줄 ${list[0].line})` : ""}`);
+  for (const [f, list] of errs) lines.push(`- ${f} error: ${list[0].message}${list[0].line ? ` (line ${list[0].line})` : ""}`);
   if (body.variants?.files?.length) {
-    lines.push(`- "${body.variants.base}"의 서로 다른 안 ${body.variants.files.length}개를 만든다. 복사본을 미리 만들어 나란히 두었다: ${body.variants.files.map((f) => `${rel0 ? rel0 + "/" : ""}screens/${f}`).join(", ")}. 각 파일을 서로 다른 방향으로 고치고, place_board로 제목을 "안 1: 요약"처럼 바꾼다. 원본은 고치지 않는다.`);
+    lines.push(`- Make ${body.variants.files.length} distinct variants of "${body.variants.base}". Copies have already been created side by side: ${body.variants.files.map((f) => `${rel0 ? rel0 + "/" : ""}screens/${f}`).join(", ")}. Take each file in a different direction, and use place_board to retitle each one like "Variant 1: summary". Do not modify the original.`);
   }
   lines.push(
-    `규칙: 디자인 파일은 ${rel}/screens 안에서만 고친다. 바꿀 부분만 고치고 나머지는 그대로 둔다. 새 화면은 <meta name="board-size" content="390x844">를 넣고, 만든 뒤 place_board로 이름과 자리를 정한다. 색은 #111111·#6B6B6B·#C94F0C·#FFFFFF·#F5F5F3, 글꼴은 Pretendard.`,
+    `Rules: Only edit design files inside ${rel}/screens. Change only what is asked and leave everything else as is. New screens must include <meta name="board-size" content="390x844">; after creating one, use place_board to set its name and position. Colors: #111111, #6B6B6B, #C94F0C, #FFFFFF, #F5F5F3. Font: Pretendard.`,
     "",
-    "[요청]",
+    "[Request]",
     body.text,
   );
   return lines.join("\n");
 }
 
-/** 원본 아래에서 안 n개가 다른 보드와 겹치지 않는 첫 줄의 y */
+/** y of the first row below the original where n variants do not overlap other boards */
 function freeRowY(board, b, n) {
   const w = (b.w + 80) * n;
   let y = b.y + b.h + 160;
@@ -142,13 +142,13 @@ export function chatRoutes({ getSelection } = {}) {
         async (req, res, url, ctx) => {
           const body = await readBody(req);
           const agent = body.agent === "codex" ? "codex" : "claude";
-          if (!String(body.text ?? "").trim()) return sendJson(res, 400, { error: "할 말을 적어 주세요" });
+          if (!String(body.text ?? "").trim()) return sendJson(res, 400, { error: "Please enter a message" });
           state.selection = getSelection?.() ?? null;
-          // N가지 안: 원본 복사본을 오른쪽에 나란히 만든다
+          // N variants: create copies of the original side by side to the right
           const n = Math.min(4, Math.max(0, Number(body.variants) || 0));
           if (n > 1) {
             const base = body.attach?.boards?.[0] ?? state.selection?.file;
-            if (!base) return sendJson(res, 400, { error: "안을 만들 보드를 하나 고르세요" });
+            if (!base) return sendJson(res, 400, { error: "Select one board to make variants of" });
             const html = await fs.readFile(path.join(ctx.store.screensDir, base), "utf8");
             const { board } = await ctx.store.syncBoard();
             const b = board.boards[base] ?? { x: 0, y: 0, w: 390, h: 844 };
@@ -156,8 +156,8 @@ export function chatRoutes({ getSelection } = {}) {
             const files = await ctx.store.exclusive(() =>
               createBoards(
                 ctx,
-                Array.from({ length: n }, (_, i) => ({ file: `${stem}-v${i + 1}.html`, html, x: b.x + (b.w + 80) * i, y: freeRowY(board, b, n), w: b.w, h: b.h, title: `${b.title ?? stem} 안 ${i + 1}`, page: b.page })),
-                `안 ${n}개 만들기 ${base}`,
+                Array.from({ length: n }, (_, i) => ({ file: `${stem}-v${i + 1}.html`, html, x: b.x + (b.w + 80) * i, y: freeRowY(board, b, n), w: b.w, h: b.h, title: `${b.title ?? stem} variant ${i + 1}`, page: b.page })),
+                `Create ${n} variants ${base}`,
               ),
             );
             body.variants = { base, files };
@@ -169,11 +169,11 @@ export function chatRoutes({ getSelection } = {}) {
           const id = `r${Date.now().toString(36)}`;
           let proc;
           try {
-            // Windows: claude·codex는 .cmd 껍데기라 shell이 필요하고, 프로세스 묶음 종료가 없어 detached를 쓰지 않는다
+            // Windows: claude/codex are .cmd wrappers so a shell is needed, and there is no process-group kill so detached is not used
             const win = process.platform === "win32";
             proc = spawn(cmd, win ? args.map(winQuote) : args, { cwd: rootOf(ctx.dir), stdio: ["ignore", "pipe", "pipe"], detached: !win, shell: win, windowsHide: true, env: { ...process.env, DESIGN_CANVAS_PORT: String(req.socket.localPort) } });
           } catch (e) {
-            return sendJson(res, 500, { error: `${cmd}를 실행하지 못했어요: ${e.message}` });
+            return sendJson(res, 500, { error: `Could not run ${cmd}: ${e.message}` });
           }
           const run = { proc, agent, events: [], status: "running", prompt };
           runs.set(id, run);
@@ -197,14 +197,14 @@ export function chatRoutes({ getSelection } = {}) {
           proc.stderr.on("data", (d) => (err += d).length > 4000 && (err = err.slice(-4000)));
           proc.on("error", (e) => {
             run.status = "error";
-            emit({ kind: "error", text: e.code === "ENOENT" ? `${cmd} 명령이 없어요. 설치하고 로그인해 주세요.` : e.message });
+            emit({ kind: "error", text: e.code === "ENOENT" ? `${cmd} command not found. Install it and sign in.` : e.message });
             emit({ kind: "end", status: "error" });
           });
           proc.on("close", (code, signal) => {
             if (run.status === "error") return;
             if (buf.trim()) for (const ev of parseLine(agent, buf, st)) emit(ev);
             run.status = run.cancelled ? "cancelled" : code === 0 ? "done" : "error";
-            if (run.status === "error") emit({ kind: "error", text: err.trim().split("\n").slice(-3).join("\n") || `종료 코드 ${code ?? signal}` });
+            if (run.status === "error") emit({ kind: "error", text: err.trim().split("\n").slice(-3).join("\n") || `Exit code ${code ?? signal}` });
             emit({ kind: "end", status: run.status });
           });
           sendJson(res, 200, { id, variants: body.variants?.files ?? [] });
@@ -216,11 +216,11 @@ export function chatRoutes({ getSelection } = {}) {
         async (req, res) => {
           const { id } = await readBody(req);
           const run = runs.get(id);
-          if (!run || run.status !== "running") return sendJson(res, 404, { error: "실행 중이 아니에요" });
+          if (!run || run.status !== "running") return sendJson(res, 404, { error: "Not running" });
           run.cancelled = true;
           try {
             if (process.platform === "win32") spawn("taskkill", ["/pid", String(run.proc.pid), "/T", "/F"], { windowsHide: true });
-            else process.kill(-run.proc.pid, "SIGTERM"); // 프로세스 묶음째
+            else process.kill(-run.proc.pid, "SIGTERM"); // the whole process group
           } catch {
             run.proc.kill("SIGTERM");
           }
@@ -237,7 +237,7 @@ export function chatRoutes({ getSelection } = {}) {
           sendJson(res, 200, { agents: [{ id: "claude", label: "Claude Code", ok: fake.includes("claude") || (await which("claude")) }, { id: "codex", label: "Codex", ok: fake.includes("codex") || (await which("codex")) }] });
         },
       ],
-      // 참고 자료 올리기: docs/design/.refs/에 저장(.gitignore로 레포에 안 들어감)
+      // Upload references: stored in docs/design/.refs/ (kept out of the repo by .gitignore)
       [
         "POST",
         "/api/refs",
@@ -252,7 +252,7 @@ export function chatRoutes({ getSelection } = {}) {
           sendJson(res, 200, { value: `.refs/${file}`, kind: /\.(png|jpe?g|gif|webp)$/i.test(name) ? "image" : "file", name });
         },
       ],
-      // 캔버스 상태(모드·페이지·보이는 보드·선택 보드·저장 대기)와 보드 오류
+      // Canvas state (mode, page, visible boards, selected boards, pending saves) and board errors
       [
         "PUT",
         "/api/context",
@@ -266,7 +266,7 @@ export function chatRoutes({ getSelection } = {}) {
         "/api/errors",
         async (req, res, url, ctx) => {
           const { file, errors } = await readBody(req);
-          if (!file) return sendJson(res, 400, { error: "file이 필요해요" });
+          if (!file) return sendJson(res, 400, { error: "file is required" });
           if (errors?.length) state.errors[file] = errors.slice(0, 20);
           else delete state.errors[file];
           ctx.broadcast({ type: "errors-changed" });

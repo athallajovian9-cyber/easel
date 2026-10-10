@@ -1,5 +1,5 @@
 // AI-generated with Claude Code, 2026-10-09, reviewed by Hyun Park
-// 보드 관리: 만들기(새 HTML)·삭제(휴지통)·복제·이름 바꾸기(참조 갱신)·board.json 저장. 모두 시간순 실행 취소 기록에 남긴다.
+// Board management: create (new HTML), delete (to trash), duplicate, rename (updating references), save board.json. All recorded in the chronological undo history.
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -13,12 +13,12 @@ const FILE_RE = /^[a-z0-9][a-z0-9._-]*\.html$/i;
 const FONT = `@font-face{font-family:"Pretendard Variable";font-weight:45 920;font-style:normal;font-display:swap;src:url(https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/variable/woff2/PretendardVariable.woff2) format("woff2-variations")}
 body{margin:0;color-scheme:light;font-family:"Pretendard Variable",Pretendard,-apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;color:#111111;background:#FFFFFF;-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums}`;
 
-/** 새 보드 틀. 크기는 보드 크기 meta와 맨 바깥 div에 같이 적는다 */
+/** New board templates. The size is written both in the board-size meta and on the outermost div */
 export const TEMPLATES = {
-  blank: { label: "빈 보드", w: 390, h: 844 },
-  mobile: { label: "모바일 화면", w: 390, h: 844 },
-  desktop: { label: "PC 화면", w: 1440, h: 900 },
-  doc: { label: "문서·메모", w: 800, h: 1000 },
+  blank: { label: "Blank", w: 390, h: 844 },
+  mobile: { label: "Mobile screen", w: 390, h: 844 },
+  desktop: { label: "Desktop screen", w: 1440, h: 900 },
+  doc: { label: "Document", w: 800, h: 1000 },
 };
 
 export function newBoardHtml({ title, w, h, template = "blank" }) {
@@ -32,11 +32,11 @@ export function newBoardHtml({ title, w, h, template = "blank" }) {
     <span style="font-size:17px;font-weight:700">${t}</span>
   </header>
   <main style="flex:1;padding:16px 20px;display:flex;flex-direction:column;gap:16px">
-    <h1 style="margin:0;font-size:34px;font-weight:700;letter-spacing:-0.02em;line-height:1.15">제목</h1>
-    <p style="margin:0;font-size:17px;line-height:1.5;color:#6B6B6B">설명 글</p>
+    <h1 style="margin:0;font-size:34px;font-weight:700;letter-spacing:-0.02em;line-height:1.15">Title</h1>
+    <p style="margin:0;font-size:17px;line-height:1.5;color:#6B6B6B">Description</p>
   </main>
   <footer style="padding:12px 20px 32px;flex:none">
-    <a href="#" style="display:flex;align-items:center;justify-content:center;height:56px;border-radius:16px;background:#C94F0C;color:#FFFFFF;font-size:17px;font-weight:700;text-decoration:none">다음</a>
+    <a href="#" style="display:flex;align-items:center;justify-content:center;height:56px;border-radius:16px;background:#C94F0C;color:#FFFFFF;font-size:17px;font-weight:700;text-decoration:none">Next</a>
   </footer>
 </div>`,
     desktop: `<div style="width:${w}px;min-height:${h}px;box-sizing:border-box;background:#FFFFFF;display:flex;flex-direction:column">
@@ -49,7 +49,7 @@ export function newBoardHtml({ title, w, h, template = "blank" }) {
 </div>`,
     doc: `<div style="width:${w}px;min-height:${h}px;box-sizing:border-box;padding:48px;display:flex;flex-direction:column;gap:16px;background:#FFFFFF">
   <h1 style="margin:0;font-size:34px;font-weight:700;letter-spacing:-0.02em">${t}</h1>
-  <p style="margin:0;font-size:17px;line-height:1.6;color:#111111">내용</p>
+  <p style="margin:0;font-size:17px;line-height:1.6;color:#111111">Body text</p>
 </div>`,
   };
   return `<!doctype html>
@@ -72,17 +72,17 @@ ${bodies[template] ?? bodies.blank}
 `;
 }
 
-/** 이름이 겹치지 않는 파일 이름 */
+/** A file name that does not collide */
 async function uniqueName(screensDir, base) {
   const stem = base.replace(/\.html$/i, "");
   for (let i = 0; i < 1000; i++) {
     const name = `${stem}${i ? `-${i + 1}` : ""}.html`;
     if (!(await read(path.join(screensDir, name)))) return name;
   }
-  throw new Error("이름을 만들 수 없어요");
+  throw new Error("Could not generate a file name");
 }
 
-/** 다른 화면에서 이 파일을 가리키는 href·src 수 */
+/** Number of href/src references to this file from other screens */
 async function findRefs(screensDir, files, target) {
   const re = new RegExp(`((?:href|src)\\s*=\\s*["'])(\\.?/?)${target.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(["'#?])`, "g");
   const out = [];
@@ -95,7 +95,7 @@ async function findRefs(screensDir, files, target) {
   return { re, refs: out };
 }
 
-/** 페이지 목록을 바꾼다. page가 없는 항목은 첫 페이지 소속이므로, 바뀐 첫 페이지 기준으로 다시 적는다 */
+/** Replaces the page list. Items without page belong to the first page, so they are rewritten against the new first page */
 function repage(board, pages, map = (pid) => pid) {
   const oldFirst = board.pages[0]?.id;
   const first = pages[0]?.id;
@@ -108,7 +108,7 @@ function repage(board, pages, map = (pid) => pid) {
   if (board.launch?.page && !pages.some((p) => p.id === board.launch.page)) delete board.launch.page;
 }
 
-/** 보드 여러 개를 한 기록 단계로 만든다. items: [{file, html, x, y, w, h, title, page}] → 실제 파일 이름 목록 */
+/** Creates several boards as one history step. items: [{file, html, x, y, w, h, title, page}] → list of actual file names */
 export async function createBoards(ctx, items, label) {
   const changes = [];
   const made = [];
@@ -133,7 +133,7 @@ export async function createBoards(ctx, items, label) {
   return made.map((m) => m.file);
 }
 
-/** board.json을 바꾸고 기록을 남기는 공통 함수 */
+/** Shared helper that changes board.json and records history */
 export async function commitBoard(ctx, label, mutate, fileChanges = []) {
   const { store, history } = ctx;
   const before = await read(store.boardPath);
@@ -153,7 +153,7 @@ export function boardRoutes() {
       "/api/board",
       async (req, res, url, ctx) => {
         const body = await readBody(req);
-        if (!body || typeof body.boards !== "object") return sendJson(res, 400, { error: "boards가 필요해요" });
+        if (!body || typeof body.boards !== "object") return sendJson(res, 400, { error: "boards is required" });
         const { clientId, label, ...rest } = body;
         const next = { version: 1, title: rest.title ?? "", pages: Array.isArray(rest.pages) ? rest.pages : [], boards: rest.boards, order: Array.isArray(rest.order) ? rest.order : Object.keys(rest.boards), notes: rest.notes ?? {} };
         for (const k of ["launch", "shapes", "guides"]) if (rest[k] !== undefined) next[k] = rest[k];
@@ -178,7 +178,7 @@ export function boardRoutes() {
         const wanted = b.file && FILE_RE.test(b.file) ? b.file : `${tpl === "blank" ? "board" : tpl}.html`;
         const title = b.title || (tpl === "blank" ? wanted.replace(/\.html$/, "") : TEMPLATES[tpl].label);
         const html = b.html ?? newBoardHtml({ title, w, h, template: tpl });
-        const [file] = await createBoards(ctx, [{ file: wanted, html, x: b.x, y: b.y, w, h, title, page: b.page }], `보드 만들기 ${wanted}`);
+        const [file] = await createBoards(ctx, [{ file: wanted, html, x: b.x, y: b.y, w, h, title, page: b.page }], `Create board ${wanted}`);
         sendJson(res, 200, { file });
       },
     ],
@@ -189,8 +189,8 @@ export function boardRoutes() {
       async (req, res, url, ctx) => {
         const b = await readBody(req);
         const files = (b.files ?? []).filter((f) => FILE_RE.test(path.basename(f)));
-        if (!files.length) return sendJson(res, 400, { error: "files가 필요해요" });
-        // 휴지통(docs/design/.trash/)에도 복사해 둔다. 실행 취소는 기록에서 되살린다
+        if (!files.length) return sendJson(res, 400, { error: "files is required" });
+        // Also copy to the trash (docs/design/.trash/). Undo restores from the history
         const trash = path.join(ctx.dir, ".trash", new Date().toISOString().replace(/[:.]/g, "-"));
         await fs.mkdir(trash, { recursive: true });
         await fs.writeFile(path.join(ctx.dir, ".trash", ".gitignore"), "*\n").catch(() => {});
@@ -205,7 +205,7 @@ export function boardRoutes() {
         }
         await commitBoard(
           ctx,
-          `보드 삭제 ${files.join(", ")}`,
+          `Delete board ${files.join(", ")}`,
           (board) => {
             for (const f of files) delete board.boards[f];
             board.order = board.order.filter((f) => !files.includes(f));
@@ -222,7 +222,7 @@ export function boardRoutes() {
         const b = await readBody(req);
         const src = safeJoin(ctx.store.screensDir, b.file ?? "");
         const html = src && (await read(src));
-        if (html == null) return sendJson(res, 404, { error: "파일이 없어요" });
+        if (html == null) return sendJson(res, 404, { error: "File not found" });
         const file = await uniqueName(ctx.store.screensDir, b.file.replace(/\.html$/, "") + "-copy.html");
         const p = path.join(ctx.store.screensDir, file);
         await writeAtomic(p, html);
@@ -230,9 +230,9 @@ export function boardRoutes() {
         const it = board0.boards[b.file] ?? { x: 0, y: 0, w: 390, h: 844 };
         await commitBoard(
           ctx,
-          `보드 복제 ${b.file}`,
+          `Duplicate board ${b.file}`,
           (board) => {
-            board.boards[file] = { ...it, x: it.x + it.w + 80, title: `${it.title ?? b.file.replace(/\.html$/, "")} 복사` };
+            board.boards[file] = { ...it, x: it.x + it.w + 80, title: `${it.title ?? b.file.replace(/\.html$/, "")} copy` };
             const i = board.order.indexOf(b.file);
             board.order.splice(i < 0 ? board.order.length : i + 1, 0, file);
           },
@@ -256,19 +256,19 @@ export function boardRoutes() {
       async (req, res, url, ctx) => {
         const b = await readBody(req);
         const board0 = await ctx.store.readBoard();
-        if (!board0.boards[b.file]) return sendJson(res, 404, { error: "보드가 없어요" });
-        // 제목만 바꾸기
+        if (!board0.boards[b.file]) return sendJson(res, 404, { error: "Board not found" });
+        // Title-only rename
         if (!b.newFile || b.newFile === b.file) {
-          await commitBoard(ctx, `이름 바꾸기 ${b.file}`, (board) => {
+          await commitBoard(ctx, `Rename ${b.file}`, (board) => {
             board.boards[b.file] = { ...board.boards[b.file], title: String(b.title ?? "").trim() || undefined };
           });
           return sendJson(res, 200, { file: b.file });
         }
-        // 파일 이름 바꾸기(+ 참조 갱신 선택)
-        if (!FILE_RE.test(b.newFile)) return sendJson(res, 400, { error: "파일 이름은 영문·숫자·-·_ 와 .html" });
+        // Rename file (optionally updating references)
+        if (!FILE_RE.test(b.newFile)) return sendJson(res, 400, { error: "File names may use letters, digits, - and _, and must end in .html" });
         const from = safeJoin(ctx.store.screensDir, b.file);
         const to = safeJoin(ctx.store.screensDir, b.newFile);
-        if (await read(to)) return sendJson(res, 409, { error: "같은 이름의 파일이 있어요" });
+        if (await read(to)) return sendJson(res, 409, { error: "A file with that name already exists" });
         const html = await read(from);
         const changes = [];
         await writeAtomic(to, html);
@@ -287,7 +287,7 @@ export function boardRoutes() {
         }
         await commitBoard(
           ctx,
-          `파일 이름 바꾸기 ${b.file} → ${b.newFile}`,
+          `Rename file ${b.file} → ${b.newFile}`,
           (board) => {
             board.boards[b.newFile] = { ...board.boards[b.file], ...(b.title ? { title: b.title } : {}) };
             delete board.boards[b.file];
@@ -317,7 +317,7 @@ export function boardRoutes() {
       },
     ],
     ["GET", "/api/history", async (req, res, url, ctx) => sendJson(res, 200, ctx.history.state())],
-    // 메모(제목·포스트잇): MCP와 앱이 같이 쓴다. 모두 실행 취소 기록에 남는다
+    // Notes (titles, sticky notes): shared by MCP and the app. All recorded in the undo history
     [
       "POST",
       "/api/notes",
@@ -325,30 +325,30 @@ export function boardRoutes() {
         const b = await readBody(req);
         const board0 = await ctx.store.readBoard();
         if (b.action === "add") {
-          if (!["title", "sticky"].includes(b.kind)) return sendJson(res, 400, { error: "kind는 title 또는 sticky" });
-          if (Object.keys(board0.notes).length >= 200) return sendJson(res, 400, { error: "메모는 200개까지예요" });
+          if (!["title", "sticky"].includes(b.kind)) return sendJson(res, 400, { error: "kind must be title or sticky" });
+          if (Object.keys(board0.notes).length >= 200) return sendJson(res, 400, { error: "Notes are limited to 200" });
           let id;
           do id = `n${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
           while (board0.notes[id]);
           const note = { kind: b.kind, x: Math.round(b.x ?? 0), y: Math.round(b.y ?? 0), text: String(b.text ?? ""), ...(b.kind === "title" ? { maxW: 2000 } : { w: Math.round(b.w ?? 400) }), ...(b.page ? { page: b.page } : {}) };
-          await commitBoard(ctx, `메모 추가`, (board) => void (board.notes[id] = note));
+          await commitBoard(ctx, `Add note`, (board) => void (board.notes[id] = note));
           return sendJson(res, 200, { id, note });
         }
-        if (!board0.notes[b.id]) return sendJson(res, 404, { error: "메모가 없어요" });
+        if (!board0.notes[b.id]) return sendJson(res, 404, { error: "Note not found" });
         if (b.action === "update") {
           const patch = {};
           for (const k of ["text", "x", "y", "w", "page", "color", "size", "bold", "italic"]) if (b[k] !== undefined) patch[k] = b[k];
-          await commitBoard(ctx, `메모 고치기`, (board) => void (board.notes[b.id] = { ...board.notes[b.id], ...patch }));
+          await commitBoard(ctx, `Edit note`, (board) => void (board.notes[b.id] = { ...board.notes[b.id], ...patch }));
           return sendJson(res, 200, { id: b.id });
         }
         if (b.action === "delete") {
-          await commitBoard(ctx, `메모 삭제`, (board) => void delete board.notes[b.id]);
+          await commitBoard(ctx, `Delete note`, (board) => void delete board.notes[b.id]);
           return sendJson(res, 200, { id: b.id });
         }
-        sendJson(res, 400, { error: "action은 add·update·delete" });
+        sendJson(res, 400, { error: "action must be add, update or delete" });
       },
     ],
-    // 페이지: 추가·이름·삭제(보드·메모는 첫 페이지로)·순서
+    // Pages: add, rename, delete (boards/notes move to the first page), reorder
     [
       "POST",
       "/api/pages",
@@ -356,37 +356,37 @@ export function boardRoutes() {
         const b = await readBody(req);
         const board0 = await ctx.store.readBoard();
         if (b.action === "add") {
-          if (board0.pages.length >= 40) return sendJson(res, 400, { error: "페이지는 40개까지예요" });
+          if (board0.pages.length >= 40) return sendJson(res, 400, { error: "Pages are limited to 40" });
           const id = `p${Date.now().toString(36)}`;
-          const name = String(b.name ?? "").trim() || `페이지 ${board0.pages.length + 1}`;
-          await commitBoard(ctx, "페이지 추가", (board) => {
-            board.pages = board.pages.length ? [...board.pages, { id, name }] : [{ id: "main", name: "기본" }, { id, name }];
+          const name = String(b.name ?? "").trim() || `Page ${board0.pages.length + 1}`;
+          await commitBoard(ctx, "Add page", (board) => {
+            board.pages = board.pages.length ? [...board.pages, { id, name }] : [{ id: "main", name: "Default" }, { id, name }];
           });
           return sendJson(res, 200, { id });
         }
         const pg = board0.pages.find((p) => p.id === b.id);
-        if (!pg) return sendJson(res, 404, { error: "페이지가 없어요" });
+        if (!pg) return sendJson(res, 404, { error: "Page not found" });
         if (b.action === "rename") {
-          await commitBoard(ctx, "페이지 이름 바꾸기", (board) => void (board.pages = board.pages.map((p) => (p.id === b.id ? { ...p, name: String(b.name ?? p.name).trim() || p.name } : p))));
+          await commitBoard(ctx, "Rename page", (board) => void (board.pages = board.pages.map((p) => (p.id === b.id ? { ...p, name: String(b.name ?? p.name).trim() || p.name } : p))));
           return sendJson(res, 200, { id: b.id });
         }
         if (b.action === "delete") {
-          if (board0.pages.length <= 1) return sendJson(res, 400, { error: "마지막 페이지는 지울 수 없어요" });
-          await commitBoard(ctx, `페이지 삭제 ${pg.name}`, (board) =>
+          if (board0.pages.length <= 1) return sendJson(res, 400, { error: "The last page cannot be deleted" });
+          await commitBoard(ctx, `Delete page ${pg.name}`, (board) =>
             repage(board, board.pages.filter((p) => p.id !== b.id), (pid, first) => (pid === b.id ? first : pid)),
           );
           return sendJson(res, 200, { ok: true });
         }
         if (b.action === "move") {
           const to = Math.max(0, Math.min(board0.pages.length - 1, Number(b.index) || 0));
-          await commitBoard(ctx, "페이지 순서", (board) => {
+          await commitBoard(ctx, "Reorder pages", (board) => {
             const pages = board.pages.filter((p) => p.id !== b.id);
             pages.splice(to, 0, pg);
             repage(board, pages);
           });
           return sendJson(res, 200, { ok: true });
         }
-        sendJson(res, 400, { error: "action은 add·rename·delete·move" });
+        sendJson(res, 400, { error: "action must be add, rename, delete or move" });
       },
     ],
   ];

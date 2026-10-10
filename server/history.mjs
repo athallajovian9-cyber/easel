@@ -1,6 +1,6 @@
 // AI-generated with Claude Code, 2026-10-09, reviewed by Hyun Park
-// 하나의 시간순 실행 취소 기록: 캔버스 조작(board.json)과 HTML 편집·보드 파일 만들기/지우기를 같은 줄에 쌓는다.
-// 단계 = { label, changes: [{ path, before, after }] } — before/after가 null이면 파일이 없다는 뜻.
+// One chronological undo history: canvas operations (board.json), HTML edits and board file create/delete share the same stack.
+// step = { label, changes: [{ path, before, after }] } — before/after null means the file does not exist.
 import fs from "node:fs/promises";
 
 import { writeAtomic } from "./fsutil.mjs";
@@ -14,14 +14,14 @@ export function createHistory({ onWrite } = {}) {
   const read = (p) => fs.readFile(p, "utf8").catch(() => null);
 
   async function apply(changes, dir) {
-    // 그사이 밖에서 바뀌었으면 덮어쓰지 않는다
+    // Do not overwrite if the file changed outside in the meantime
     for (const c of changes) {
       const now = await read(c.path);
       const expect = dir === "undo" ? c.after : c.before;
       if (now !== expect) {
         undo = [];
         redo = [];
-        throw Object.assign(new Error("파일이 밖에서 바뀌어 실행 취소 기록을 비웠어요"), { status: 409 });
+        throw Object.assign(new Error("A file changed outside the app, so the undo history was cleared"), { status: 409 });
       }
     }
     for (const c of changes) {
@@ -33,7 +33,7 @@ export function createHistory({ onWrite } = {}) {
   }
 
   return {
-    /** 이미 쓴 변경을 기록한다 */
+    /** Records a change that has already been written */
     push(label, changes) {
       const real = changes.filter((c) => c.before !== c.after);
       if (!real.length) return;

@@ -1,5 +1,5 @@
 // AI-generated with Claude Code, 2026-10-09, reviewed by Hyun Park
-// 원본 HTML 패치: 바뀐 구간만 문자열로 교체한다(다시 직렬화하지 않음). PLAN.md 0장·4장.
+// Source HTML patching: replaces only the changed range as a string (no re-serialization). PLAN.md ch. 0 and 4.
 import { elementChildren, inspect, isElement, nodeAtPath, parseHtml } from "./html.mjs";
 
 export class EditError extends Error {
@@ -13,17 +13,17 @@ const escText = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").re
 const escAttr = (s) => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
 const splice = (html, start, end, text) => html.slice(0, start) + text + html.slice(end);
 
-/** 대상 요소를 찾고 해시를 확인한다. 다르면 다른 사람·AI가 그사이 파일을 고친 것 */
+/** Finds the target element and checks its hash. A mismatch means someone else or an AI edited the file in the meantime */
 function target(html, path, hash) {
   const info = inspect(html, path);
-  if (!info) throw new EditError(409, "요소가 없어요(파일이 바뀜, 다시 선택)");
-  if (hash && info.hash !== hash) throw new EditError(409, "파일이 바뀜, 다시 선택");
+  if (!info) throw new EditError(409, "Element not found (the file changed, select again)");
+  if (hash && info.hash !== hash) throw new EditError(409, "The file changed, select again");
   return info;
 }
 
-/* ---------- style 속성 안 선언 다루기 ---------- */
+/* ---------- Declarations inside the style attribute ---------- */
 
-/** "a:1; b: url(x;y)" → [{prop, value, start, end}] (괄호·따옴표 안의 ;는 무시) */
+/** "a:1; b: url(x;y)" → [{prop, value, start, end}] (; inside parentheses or quotes is ignored) */
 export function parseDecls(style) {
   const out = [];
   let depth = 0;
@@ -50,7 +50,7 @@ export function parseDecls(style) {
   return out;
 }
 
-/** 선언 하나만 바꾼다. value가 빈 문자열이면 지운다. 나머지 선언의 글자는 그대로 둔다 */
+/** Changes a single declaration. An empty value removes it. The text of other declarations stays untouched */
 export function setDecl(style, prop, value) {
   prop = prop.trim().toLowerCase();
   const decls = parseDecls(style);
@@ -58,7 +58,7 @@ export function setDecl(style, prop, value) {
   const sep = /;\s/.test(style) ? "; " : ";";
   if (d) {
     if (value === "" || value == null) {
-      // 뒤의 ;까지 함께 지운다
+      // also remove the trailing ;
       let end = d.end;
       if (style[end] === ";") end++;
       while (style[end] === " ") end++;
@@ -77,11 +77,11 @@ export function setDecl(style, prop, value) {
   return base ? `${base}${sep}${prop}:${/:\s/.test(style) ? " " : ""}${value}` : `${prop}:${value}`;
 }
 
-/* ---------- 속성 구간 ---------- */
+/* ---------- Attribute ranges ---------- */
 function startTagEnd(html, node) {
   const st = node.sourceCodeLocation?.startTag;
-  if (!st) throw new EditError(422, "시작 태그 위치를 알 수 없어요");
-  // '/>' 또는 '>' 바로 앞에 끼워 넣는다
+  if (!st) throw new EditError(422, "Start tag location is unknown");
+  // insert right before '/>' or '>'
   let i = st.endOffset - 1;
   if (html[i - 1] === "/") i--;
   while (html[i - 1] === " " || html[i - 1] === "\n") i--;
@@ -92,7 +92,7 @@ function setAttrRaw(html, node, name, value) {
   const attrLoc = node.sourceCodeLocation?.attrs?.[name.toLowerCase()];
   if (attrLoc) {
     if (value == null) {
-      // 앞 공백까지 지운다
+      // also remove the leading whitespace
       let s = attrLoc.startOffset;
       while (s > 0 && /\s/.test(html[s - 1])) s--;
       return splice(html, s, attrLoc.endOffset, "");
@@ -104,38 +104,38 @@ function setAttrRaw(html, node, name, value) {
   return splice(html, at, at, ` ${name}="${escAttr(value)}"`);
 }
 
-/* ---------- 편집 연산 ---------- */
+/* ---------- Edit operations ---------- */
 
 export function applyEdit(html, req) {
   const { op, path, hash } = req;
   if (op === "setText") {
     const { node } = target(html, path, hash);
     const kids = node.childNodes ?? [];
-    // 여러 줄: 글자와 <br>만 있는 요소는 안쪽 전체를 "줄<br>줄"로 바꾼다
+    // Multi-line: for elements containing only text and <br>, replace the whole inside with "line<br>line"
     const onlyBr = elementChildren(node).every((k) => k.tagName === "br") && kids.every((k) => k.nodeName === "#text" || k.nodeName === "br" || k.nodeName === "#comment");
     if (onlyBr && (String(req.text).includes("\n") || elementChildren(node).length)) {
       const st = node.sourceCodeLocation?.startTag;
       const et = node.sourceCodeLocation?.endTag;
-      if (!st || !et) throw new EditError(422, "위치를 알 수 없어요");
+      if (!st || !et) throw new EditError(422, "Location is unknown");
       const inner = html.slice(st.endOffset, et.startOffset);
       const lead = inner.match(/^\s*/)[0];
       const trail = inner.match(/\s*$/)[0];
       return splice(html, st.endOffset, et.startOffset, lead + String(req.text).split("\n").map(escText).join("<br>") + trail);
     }
-    if (elementChildren(node).length) throw new EditError(422, "글자 하나만 있는 요소만 바로 고칠 수 있어요");
+    if (elementChildren(node).length) throw new EditError(422, "Only elements with a single text node can be edited directly");
     const texts = kids.filter((k) => k.nodeName === "#text");
-    if (texts.length > 1 || kids.some((k) => k.nodeName !== "#text" && k.nodeName !== "#comment")) throw new EditError(422, "글자 하나만 있는 요소만 바로 고칠 수 있어요");
+    if (texts.length > 1 || kids.some((k) => k.nodeName !== "#text" && k.nodeName !== "#comment")) throw new EditError(422, "Only elements with a single text node can be edited directly");
     const t = texts[0];
     if (t?.sourceCodeLocation) {
       const { startOffset, endOffset } = t.sourceCodeLocation;
-      // 앞뒤 공백(들여쓰기)은 그대로 둔다
+      // keep leading/trailing whitespace (indentation)
       const orig = html.slice(startOffset, endOffset);
       const lead = orig.match(/^\s*/)[0];
       const trail = orig.match(/\s*$/)[0];
       return splice(html, startOffset, endOffset, lead + escText(req.text) + trail);
     }
     const st = node.sourceCodeLocation?.startTag;
-    if (!st) throw new EditError(422, "위치를 알 수 없어요");
+    if (!st) throw new EditError(422, "Location is unknown");
     return splice(html, st.endOffset, st.endOffset, escText(req.text));
   }
   if (op === "setStyle") {
@@ -145,10 +145,10 @@ export function applyEdit(html, req) {
     if (next === cur) return html;
     const loc = node.sourceCodeLocation?.attrs?.style;
     if (loc) {
-      // 원래 따옴표를 지켜 값 부분만 바꾼다
+      // keep the original quotes and change only the value
       const raw = html.slice(loc.startOffset, loc.endOffset);
       const m = raw.match(/^(style\s*=\s*)(["']?)([\s\S]*?)\2$/i);
-      if (!m) throw new EditError(422, "style 속성을 읽을 수 없어요");
+      if (!m) throw new EditError(422, "Could not read the style attribute");
       const q = m[2] || '"';
       if (!next) {
         let s = loc.startOffset;
@@ -162,13 +162,13 @@ export function applyEdit(html, req) {
   }
   if (op === "setAttr") {
     const { node } = target(html, path, hash);
-    if (!/^[a-zA-Z_:][-a-zA-Z0-9_:.]*$/.test(String(req.name ?? ""))) throw new EditError(400, "속성 이름이 잘못됐어요");
+    if (!/^[a-zA-Z_:][-a-zA-Z0-9_:.]*$/.test(String(req.name ?? ""))) throw new EditError(400, "Invalid attribute name");
     return setAttrRaw(html, node, req.name, req.value == null ? null : String(req.value));
   }
   if (op === "delete") {
     const { range } = target(html, path, hash);
     let { start, end } = range;
-    // 요소가 한 줄을 다 차지하면 그 줄을 지운다
+    // if the element fills a whole line, remove that line
     const lineStart = html.lastIndexOf("\n", start - 1) + 1;
     const lineEnd = html.indexOf("\n", end);
     if (/^\s*$/.test(html.slice(lineStart, start)) && /^\s*$/.test(html.slice(end, lineEnd === -1 ? html.length : lineEnd))) {
@@ -185,7 +185,7 @@ export function applyEdit(html, req) {
     return splice(html, range.end, range.end, sep + source);
   }
   if (op === "move") {
-    // flex·grid 밖으로 끌어낼 때: 부모·형제 크기를 먼저 고정해 다른 요소가 움직이지 않게 한다(같은 한 단계)
+    // When dragging out of flex/grid: pin parent and sibling sizes first so other elements do not move (same single step)
     let h = html;
     for (const f of req.freeze ?? []) for (const [prop, value] of Object.entries(f.props ?? {})) h = applyEdit(h, { op: "setStyle", path: f.path, prop, value });
     return moveElement(h, req);
@@ -193,21 +193,21 @@ export function applyEdit(html, req) {
   if (op === "insert") return insertElement(html, req);
   if (op === "setTweaks") return setTweaks(html, req.values ?? {});
   if (op === "batch") {
-    // 같은 요소에 여러 속성: 해시는 첫 연산만 확인한다
-    if (!Array.isArray(req.ops) || !req.ops.length) throw new EditError(400, "ops가 필요해요");
+    // Multiple properties on the same element: only the first op checks the hash
+    if (!Array.isArray(req.ops) || !req.ops.length) throw new EditError(400, "ops is required");
     return req.ops.reduce((h, o, i) => applyEdit(h, { ...o, hash: i === 0 ? o.hash : undefined }), html);
   }
   if (op === "wrap") return wrapElements(html, req);
-  throw new EditError(400, `모르는 op: ${op}`);
+  throw new EditError(400, `Unknown op: ${op}`);
 }
 
-/** 요소 구간을 잘라 대상 부모의 index 위치에 붙인다(같은 파일 안) */
+/** Cuts the element range and pastes it at index in the target parent (within the same file) */
 function moveElement(html, { path, hash, toParentPath, index }) {
   const { range, source } = target(html, path, hash);
-  if (String(toParentPath) === path || String(toParentPath).startsWith(path + "/")) throw new EditError(422, "자기 안으로는 옮길 수 없어요");
+  if (String(toParentPath) === path || String(toParentPath).startsWith(path + "/")) throw new EditError(422, "An element cannot be moved into itself");
   const doc = parseHtml(html);
   const parent = nodeAtPath(doc, toParentPath ?? "");
-  if (!parent || !isElement(parent)) throw new EditError(409, "옮길 곳이 없어요");
+  if (!parent || !isElement(parent)) throw new EditError(409, "Move target not found");
   const siblings = elementChildren(parent);
   const self = nodeAtPath(doc, path);
   const others = siblings.filter((s) => s !== self);
@@ -226,7 +226,7 @@ function moveElement(html, { path, hash, toParentPath, index }) {
   } else {
     at = parent.sourceCodeLocation.startTag.endOffset;
   }
-  // 잘라낸 자리의 빈 줄도 함께 정리
+  // also clean up the blank line left where it was cut
   let cutStart = range.start;
   let cutEnd = range.end;
   const ls = html.lastIndexOf("\n", cutStart - 1) + 1;
@@ -245,18 +245,18 @@ function moveElement(html, { path, hash, toParentPath, index }) {
   if (at <= cutStart) {
     return html.slice(0, at) + insert + html.slice(at, cutStart) + html.slice(cutEnd);
   }
-  throw new EditError(422, "옮길 위치가 잘못됐어요");
+  throw new EditError(422, "Invalid move position");
 }
 
-/** 같은 부모의 연속된 형제를 <div style="display:flex;gap:8px">로 감싼다 */
+/** Wraps consecutive siblings of the same parent in <div style="display:flex;gap:8px"> */
 function wrapElements(html, { paths, hashes, display = "flex", direction }) {
-  if (!Array.isArray(paths) || !paths.length) throw new EditError(400, "paths가 필요해요");
+  if (!Array.isArray(paths) || !paths.length) throw new EditError(400, "paths is required");
   const infos = paths.map((p, i) => target(html, p, hashes?.[i]));
   const parentOf = (p) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
   const parent = parentOf(paths[0]);
-  if (paths.some((p) => parentOf(p) !== parent)) throw new EditError(422, "같은 부모 아래 요소만 감쌀 수 있어요");
+  if (paths.some((p) => parentOf(p) !== parent)) throw new EditError(422, "Only elements under the same parent can be wrapped");
   const idx = paths.map((p) => Number(p.split("/").pop())).sort((a, b) => a - b);
-  if (idx.some((v, i) => i && v !== idx[i - 1] + 1)) throw new EditError(422, "연속된 형제만 감쌀 수 있어요");
+  if (idx.some((v, i) => i && v !== idx[i - 1] + 1)) throw new EditError(422, "Only consecutive siblings can be wrapped");
   const start = Math.min(...infos.map((x) => x.range.start));
   const end = Math.max(...infos.map((x) => x.range.end));
   const style = display === "grid" ? "display:grid;gap:8px" : `display:flex;${direction === "column" ? "flex-direction:column;" : ""}gap:8px`;
@@ -264,21 +264,21 @@ function wrapElements(html, { paths, hashes, display = "flex", direction }) {
   const indent = /^\s*$/.test(html.slice(ls, start)) ? html.slice(ls, start) : "";
   const inner = html.slice(start, end);
   if (indent && inner.includes("\n")) {
-    const reindented = inner.replace(/\n(?=[^\n])/g, "\n  "); // 빈 줄은 들여쓰지 않는다(줄 끝 공백 방지)
+    const reindented = inner.replace(/\n(?=[^\n])/g, "\n  "); // do not indent blank lines (avoids trailing whitespace)
     return splice(html, start, end, `<div style="${style}">\n${indent}  ${reindented}\n${indent}</div>`);
   }
   return splice(html, start, end, `<div style="${style}">${inner}</div>`);
 }
 
-/** 다른 보드(또는 같은 보드)에서 복사한 요소 소스를 기준 요소 뒤(after)·앞(before)·안 끝(inside)에 붙인다 */
+/** Pastes element source copied from another (or the same) board after, before, or at the end of (inside) the reference element */
 function insertElement(html, { path, hash, position = "after", html: src }) {
   let code = String(src ?? "").trim();
-  // 복사한 소스의 원래 들여쓰기를 걷어낸다(둘째 줄부터 가장 얕은 들여쓰기 기준)
+  // strip the copied source's original indentation (based on the shallowest indent from the second line on)
   const rest = code.split("\n").slice(1).filter((l) => l.trim());
   const min = rest.length ? Math.min(...rest.map((l) => l.match(/^[ \t]*/)[0].length)) : 0;
   if (min) code = code.split("\n").map((l, i) => (i ? l.slice(Math.min(min, l.match(/^[ \t]*/)[0].length)) : l)).join("\n");
-  if (!code || !/^<[a-zA-Z]/.test(code)) throw new EditError(400, "붙일 요소가 없어요");
-  if (/<script\b/i.test(code)) throw new EditError(422, "script는 붙일 수 없어요");
+  if (!code || !/^<[a-zA-Z]/.test(code)) throw new EditError(400, "Nothing to paste");
+  if (/<script\b/i.test(code)) throw new EditError(422, "script elements cannot be pasted");
   if (path == null || path === "") {
     const doc = parseHtml(html);
     const body = nodeAtPath(doc, "");
@@ -301,13 +301,13 @@ function insertElement(html, { path, hash, position = "after", html: src }) {
       return splice(html, at, at, (ind2 ? "\n" + ind2 : "") + reindent(ind2));
     }
     const st = node.sourceCodeLocation?.startTag;
-    if (!st || !node.sourceCodeLocation.endTag) throw new EditError(422, "이 요소 안에는 붙일 수 없어요");
+    if (!st || !node.sourceCodeLocation.endTag) throw new EditError(422, "Cannot paste inside this element");
     return splice(html, st.endOffset, st.endOffset, code);
   }
   return splice(html, range.end, range.end, (indent ? "\n" + indent : "") + reindent(indent));
 }
 
-/** <script type="application/json" id="board-tweaks">의 value만 바꾼다(키 순서·나머지 그대로) */
+/** Changes only value in <script type="application/json" id="board-tweaks"> (key order and everything else untouched) */
 export function findTweaks(html) {
   const doc = parseHtml(html);
   const stack = [doc];
@@ -322,12 +322,12 @@ export function findTweaks(html) {
 function setTweaks(html, values) {
   const node = findTweaks(html);
   const text = node?.childNodes?.[0];
-  if (!node || !text?.sourceCodeLocation) throw new EditError(404, "board-tweaks가 없어요");
+  if (!node || !text?.sourceCodeLocation) throw new EditError(404, "board-tweaks not found");
   let data;
   try {
     data = JSON.parse(text.value);
   } catch {
-    throw new EditError(422, "board-tweaks JSON을 읽을 수 없어요");
+    throw new EditError(422, "Could not parse board-tweaks JSON");
   }
   for (const [k, v] of Object.entries(values)) if (data[k] && typeof data[k] === "object") data[k].value = v;
   const { startOffset, endOffset } = text.sourceCodeLocation;

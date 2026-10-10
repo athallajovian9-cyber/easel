@@ -1,5 +1,5 @@
 // AI-generated with Claude Code, 2026-10-09, reviewed by Hyun Park
-// 명령줄 인자: --dir <디자인 폴더> --port <포트>. 기본 디자인 폴더는 레포의 docs/design.
+// Command-line args: --dir <design folder> --port <port>. The default design folder is the repo's docs/design.
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
