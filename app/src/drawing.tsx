@@ -1,5 +1,5 @@
 // AI-generated with Claude Code, 2026-10-09, reviewed by Hyun Park
-// 캔버스 그리기: 도형(사각형·타원·선·화살표·펜·이미지) 그리기·선택·옮기기·크기, 메모 옵션, 보드 레이아웃 가이드.
+// Canvas drawing: draw, select, move and resize shapes (rectangle, oval, line, arrow, pen, image), note options, board layout guides.
 import { useRef, useState, type PointerEvent as RPointerEvent } from "react";
 
 import { Icon } from "./icons";
@@ -21,7 +21,7 @@ export const MAX_NOTES = 200;
 export const MAX_GUIDES = 6;
 const SHAPE_COLORS = ["#111111", "#6B6B6B", "#C94F0C", "#B42318", "#1E7A4C", "#2F6FDE", "#FFFFFF", "none"];
 
-/* ---------------- 도형 렌더링 ---------------- */
+/* ---------------- Shape rendering ---------------- */
 function ShapeSvg({ s, id }: { s: Shape; id: string }) {
   const sw = s.strokeWidth ?? 4;
   const stroke = s.stroke ?? "#111111";
@@ -129,7 +129,7 @@ export function ShapesLayer(p: {
   );
 }
 
-/* ---------------- 도형 그리기(도구가 도형일 때 캔버스 위 덮개) ---------------- */
+/* ---------------- Shape drawing (overlay on the canvas when a shape tool is active) ---------------- */
 export function ShapeDrawer({ tool, view, onDone }: { tool: ShapeKind; view: View; onDone: (s: Shape) => void }) {
   const [draft, setDraft] = useState<Shape | null>(null);
   const st = useRef<{ x0: number; y0: number; pts: [number, number][] } | null>(null);
@@ -181,7 +181,7 @@ export function ShapeDrawer({ tool, view, onDone }: { tool: ShapeKind; view: Vie
         if (!s) return;
         const w = world(e);
         let sh = shapeOf(s.x0, s.y0, w.x, w.y, s.pts, e.shiftKey);
-        // 그냥 눌렀으면 기본 크기
+        // A plain click uses the default size
         if (sh.w < 4 && sh.h < 4) {
           if (tool === "pen") return;
           sh = tool === "line" || tool === "arrow" ? { kind: tool, x: s.x0, y: s.y0, w: 200, h: 0, points: [[0, 0], [200, 0]] } : { kind: tool, x: s.x0, y: s.y0, w: 200, h: 140 };
@@ -200,7 +200,7 @@ export function ShapeDrawer({ tool, view, onDone }: { tool: ShapeKind; view: Vie
   );
 }
 
-/* ---------------- 오른쪽 패널: 도형 옵션 ---------------- */
+/* ---------------- Right panel: shape options ---------------- */
 export function ShapeOptions({ shape, onPatch, onDelete, onFront, onBack }: { shape: Shape; onPatch: (p: Partial<Shape>) => void; onDelete: () => void; onFront: () => void; onBack: () => void }) {
   const KIND: Record<ShapeKind, string> = strings.shapes.kinds;
   const Swatches = ({ value, onPick, allowNone }: { value: string; onPick: (v: string) => void; allowNone?: boolean }) => (
@@ -245,7 +245,7 @@ export function ShapeOptions({ shape, onPatch, onDelete, onFront, onBack }: { sh
   );
 }
 
-/* ---------------- 오른쪽 패널: 메모 옵션 ---------------- */
+/* ---------------- Right panel: note options ---------------- */
 export function NoteOptions({ note, onPatch, onDelete }: { note: Note; onPatch: (p: Partial<Note>) => void; onDelete: () => void }) {
   const title = note.kind === "title";
   const def = title ? 72 : 22;
@@ -319,11 +319,11 @@ function NumIn({ label, value, onCommit }: { label: string; value: number; onCom
   );
 }
 
-/* ---------------- 레이아웃 가이드 ---------------- */
+/* ---------------- Layout guides ---------------- */
 export const newGuide = (type: LayoutGuide["type"]): LayoutGuide =>
   type === "grid" ? { type, count: 0, gutter: 0, margin: 0, align: "stretch", size: 8, color: "#C94F0C" } : { type, count: type === "columns" ? 4 : 6, gutter: 16, margin: 20, align: "stretch", size: 80, color: "#C94F0C" };
 
-/** 한 축의 칸 위치 [시작, 길이][] */
+/** Track positions on one axis as [start, length][] */
 export function tracks(total: number, g: LayoutGuide): [number, number][] {
   const n = Math.max(1, Math.round(g.count));
   if (g.align === "stretch") {

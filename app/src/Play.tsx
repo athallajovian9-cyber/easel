@@ -1,5 +1,5 @@
 // AI-generated with Claude Code, 2026-10-09, reviewed by Hyun Park
-// Play: 전체 화면에서 보드를 눌러 보고, <a href="scr-02.html"> 링크로 화면 사이를 이동한다. PLAN.md 5장.
+// Play: try a board full screen and move between screens via <a href="scr-02.html"> links. PLAN.md section 5.
 import { useEffect, useRef, useState } from "react";
 
 import type { Board } from "./types";
@@ -10,10 +10,10 @@ export function Play({ board, file, onClose, onLocate }: { board: Board; file: s
   const [current, setCurrent] = useState(file);
   const item = board.boards[current] ?? board.boards[file];
 
-  // iframe 안 이동을 따라가 제목·크기를 바꾼다(링크는 상대 경로라 /screens/ 안에서 그대로 이동)
+  // Follow navigation inside the iframe to update title and size (links are relative, so they stay within /screens/)
   const onLoad = () => {
     const doc = ref.current?.contentDocument;
-    // 다른 출처로 가는 링크는 새 탭으로 연다
+    // Open cross-origin links in a new tab
     doc?.addEventListener("click", (e) => {
       const a = (e.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
       if (!a) return;

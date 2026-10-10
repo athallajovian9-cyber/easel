@@ -1,5 +1,5 @@
 // AI-generated with Claude Code, 2026-10-09, reviewed by Hyun Park
-// 선 아이콘 한 세트(24 격자, 굵기 1.75). 브랜드 아이콘을 복제하지 않고 일반 모양만 쓴다.
+// One set of line icons (24 grid, 1.75 stroke). Generic shapes only; no copied brand icons.
 import type { SVGProps } from "react";
 
 const P: Record<string, string> = {

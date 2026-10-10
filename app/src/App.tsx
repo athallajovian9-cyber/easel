@@ -1,5 +1,5 @@
 // AI-generated with Claude Code, 2026-10-09, reviewed by Hyun Park
-// 앱 셸: board.json 상태, 도구 막대, 왼쪽(페이지·보드)·오른쪽(검사기) 패널, 우클릭 메뉴, 하나의 실행 취소 기록. PLAN.md 5장.
+// App shell: board.json state, toolbar, left (pages, boards) and right (inspector) panels, context menus, a single undo history. PLAN.md section 5.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { api, clientId, connectEvents, type ServerEvent } from "./api";
@@ -122,10 +122,10 @@ export function App() {
     try {
       localStorage.setItem("design-canvas:theme", theme);
     } catch {
-      /* 무시 */
+      /* ignore */
     }
   }, [theme]);
-  /** 아직 board.json에 안 들어온 새 보드로 이동해야 할 때(안 N개 등): 들어오면 이동 */
+  /** When we must go to new boards not yet in board.json (e.g. N variants): go once they arrive */
   const [locate, setLocate] = useState<string[] | null>(null);
   const restored = useRef(false);
   const frames = useRef(new Map<string, HTMLIFrameElement>());
@@ -160,7 +160,7 @@ export function App() {
     void loadErrors();
   }, [load, loadComments, loadHistory, loadErrors]);
 
-  // 보드 안 오류 수집: 서버가 화면 HTML에 끼운 스크립트가 보낸다(start → 오류들 → loaded, 그 뒤 생기는 오류는 바로)
+  // Collect errors inside boards: sent by the script the server injects into screen HTML (start → errors → loaded; later errors arrive immediately)
   useEffect(() => {
     const live = new Map<string, { list: BoardError[]; loaded: boolean; t?: number }>();
     const flush = (file: string) => {
@@ -185,8 +185,8 @@ export function App() {
     return () => window.removeEventListener("message", onMsg);
   }, []);
 
-  /* ---------- 저장·실행 취소 ---------- */
-  /** 상태를 바꾼다. label이 있으면 바로 저장하고 실행 취소 기록에 남긴다. "draft"는 기록 없이 조금 뒤 저장(글자 입력 중) */
+  /* ---------- Save and undo ---------- */
+  /** Updates state. With a label it saves right away and records it in undo history. "draft" saves a bit later without a history entry (while typing) */
   const update = useCallback(
     (fn: (b: Board) => Board, label?: string | "draft") => {
       const prev = boardRef.current;
@@ -229,7 +229,7 @@ export function App() {
   );
   const undoAction = { label: strings.toast.undoAction, run: () => void undoRedo("undo") };
 
-  /* ---------- HTML 편집 ---------- */
+  /* ---------- HTML editing ---------- */
   const doEdit = useCallback(
     async (payload: Record<string, unknown>) => {
       if (!editFile) return false;
@@ -244,7 +244,7 @@ export function App() {
     },
     [editFile, toast],
   );
-  /** 더블클릭: 글자 하나만 있는 요소를 그 자리에서 고친다. 한글 조합 중 Enter는 무시 */
+  /** Double-click: edit a text-only element in place. Enter during IME composition is ignored */
   const onTextEdit = useCallback(
     (el: HTMLElement, path: string) => {
       if (Array.from(el.children).some((c) => c.tagName !== "BR")) {
@@ -269,10 +269,10 @@ export function App() {
           return;
         }
         const { hash } = await api.get<{ hash: string }>(`/api/element?f=${encodeURIComponent(editFile!)}&path=${encodeURIComponent(path)}`);
-        if (!(await doEdit({ op: "setText", path, hash, text }))) el.innerText = before; // Shift+Enter 줄바꿈은 원본에 <br>로
+        if (!(await doEdit({ op: "setText", path, hash, text }))) el.innerText = before; // Shift+Enter line breaks become <br> in the source
       };
       const onKey = (e: KeyboardEvent) => {
-        if (e.isComposing || e.keyCode === 229) return; // 조합 중 Enter는 글자 확정일 뿐
+        if (e.isComposing || e.keyCode === 229) return; // Enter during composition only commits the character
         if (e.key === "Enter" && !e.shiftKey) {
           e.preventDefault();
           el.blur();
@@ -281,7 +281,7 @@ export function App() {
           el.blur();
         }
       };
-      // 한글 조합 중에 포커스가 빠지면 조합이 끝날 때까지 기다렸다가 저장한다
+      // If focus leaves during IME composition, wait until composition ends, then save
       let composing = false;
       let blurWhileComposing = false;
       const onStart = () => (composing = true);
@@ -307,7 +307,7 @@ export function App() {
     [editFile, doEdit],
   );
   const hashOf = (file: string, path: string) => api.get<{ hash: string }>(`/api/element?f=${encodeURIComponent(file)}&path=${encodeURIComponent(path)}`).then((r) => r.hash);
-  /** 요소 옮기기: 옮긴 뒤 새 경로를 계산해 다시 고른다 */
+  /** Move element: compute the new path after moving and reselect it */
   const moveElement = async (path: string, plan: DropPlan) => {
     if (!editFile) return;
     const hash = await hashOf(editFile, path);
@@ -315,7 +315,7 @@ export function App() {
     void editRef.current?.select([movedPath(path, plan.toParentPath, plan.index)]);
     toast({ text: plan.freeze.length ? strings.toast.movedFrozen : strings.toast.moved, action: undoAction });
   };
-  /** ⌘C: 요소 소스를 앱 클립보드(다른 보드에서도)와 시스템 클립보드에 */
+  /** ⌘C: put the element source on the app clipboard (works across boards) and the system clipboard */
   const copyElement = async () => {
     const sel = edit.state.selection;
     if (!editFile || !sel) return;
@@ -323,12 +323,12 @@ export function App() {
     try {
       localStorage.setItem("design-canvas:clip", JSON.stringify({ source, file: editFile, path: sel.path, tag: sel.tag }));
     } catch {
-      /* 무시 */
+      /* ignore */
     }
     await navigator.clipboard?.writeText(source).catch(() => {});
     toast({ tone: "ok", text: strings.toast.copiedElement(sel.tag, mod) });
   };
-  /** ⌘V: 고른 요소 뒤(없으면 본문 끝)에 붙인다 */
+  /** ⌘V: paste after the selected element (or at the end of body) */
   const pasteElement = async () => {
     if (!editFile) return;
     let clip: { source: string; file: string; tag: string } | null = null;
@@ -363,7 +363,7 @@ export function App() {
   const edit = useEditMode(editFile, getFrame, { onTextEdit, onContext: onElementContext });
   editRef.current = edit;
 
-  // 서버 알림: 바뀐 파일의 보드만 다시 그리고, board.json이 밖에서 바뀌면 다시 읽는다
+  // Server notifications: redraw only boards whose files changed; reload board.json if it changed externally
   useEffect(
     () =>
       connectEvents((e: ServerEvent) => {
@@ -381,7 +381,7 @@ export function App() {
     [load, loadComments, loadHistory, loadErrors],
   );
 
-  /* ---------- 페이지·보이는 것 ---------- */
+  /* ---------- Pages and visibility ---------- */
   const pages = board?.pages ?? [];
   const currentPage = pages.find((p) => p.id === page)?.id ?? pages[0]?.id ?? null;
   const onPage = useCallback((item: { page?: string }) => !pages.length || (item.page ?? pages[0].id) === currentPage, [pages, currentPage]);
@@ -389,7 +389,7 @@ export function App() {
   const visibleNotes = useMemo(() => (board ? Object.keys(board.notes).filter((id) => onPage(board.notes[id])) : []), [board, onPage]);
   const size = canvasSize ?? { w: window.innerWidth, h: window.innerHeight - 48 };
 
-  // 처음 한 번: 저장해 둔 화면(확대·위치·페이지·패널)을 되살리거나 전체 보기. 시작 설정이 있으면 따른다
+  // First run: restore the saved view (zoom, position, page, panels) or fit all. Follows the launch setting if there is one
   useEffect(() => {
     if (restored.current || !board || !canvasSize) return;
     restored.current = true;
@@ -404,20 +404,20 @@ export function App() {
     if (s.view && !launch?.page) setView(s.view);
     else setView(fitView(Object.values(board.boards), canvasSize));
   }, [board, canvasSize]);
-  // 화면 상태 기억
+  // Remember view state
   useEffect(() => {
     if (!board || !restored.current) return;
     const t = window.setTimeout(() => {
       try {
         localStorage.setItem(stateKey(board.title), JSON.stringify({ view, page: currentPage, left: leftOpen, minimap: minimapOpen } satisfies Saved));
       } catch {
-        /* 저장 못 해도 동작에는 지장 없음 */
+        /* Failing to save does not affect behavior */
       }
     }, 300);
     return () => window.clearTimeout(t);
   }, [view, currentPage, leftOpen, minimapOpen, board?.title]);
 
-  // 캔버스 상태를 서버에 알린다(MCP get_selection의 mode·page·visibleArtboards·selectedArtboards·dirty)
+  // Report canvas state to the server (mode, page, visibleArtboards, selectedArtboards, dirty for MCP get_selection)
   useEffect(() => {
     if (!board) return;
     const t = window.setTimeout(() => {
@@ -468,7 +468,7 @@ export function App() {
     });
   const zoomTo = (z: number) => zoomBy(z / view.zoom);
 
-  /* ---------- 보드 조작 ---------- */
+  /* ---------- Board actions ---------- */
   const select = (files: string[], m: "replace" | "toggle" | "add" = "replace") => {
     setSelected((cur) => (m === "replace" ? files : m === "add" ? [...new Set([...cur, ...files])] : files.reduce((a, f) => (a.includes(f) ? a.filter((x) => x !== f) : [...a, f]), cur)));
     if (files.length) setSelectedNote(null);
@@ -554,7 +554,7 @@ export function App() {
       toast({ tone: "error", text: String((e as Error).message) });
     }
   };
-  /** 화면 가운데에 틀에서 새 보드 */
+  /** New board from a template at the center of the view */
   const createFromTemplate = (t: (typeof TEMPLATES)[number]) => {
     const cx = (size.w / 2 - view.x) / view.zoom;
     const cy = (size.h / 2 - view.y) / view.zoom;
@@ -562,7 +562,7 @@ export function App() {
   };
   const templateMenu = (at: { clientX: number; clientY: number }) =>
     setMenu({ x: at.clientX, y: at.clientY, title: strings.menu.newBoard, items: TEMPLATES.map((t) => ({ label: `${t.label} · ${t.size}`, icon: t.id === "doc" ? ("page" as IconName) : ("board" as IconName), shortcut: t.id === "blank" ? strings.menu.drawWithB : undefined, run: () => createFromTemplate(t) })) });
-  /** 채팅 열기(+ 보낼 말·첨부) */
+  /** Open chat (with an optional draft and attachments) */
   const openChat = (draft?: string, files?: string[]) => {
     setRightTab("chat");
     if (files?.length) setSelected(files);
@@ -575,7 +575,7 @@ export function App() {
       files.filter((f) => board?.boards[f]),
     );
 
-  /** 맨 앞(order 끝)·맨 뒤(order 앞)로 */
+  /** Bring to front (end of order) or send to back (start of order) */
   const reorder = (files: string[], to: "front" | "back") =>
     update((b) => {
       const rest = b.order.filter((f) => !files.includes(f));
@@ -594,7 +594,7 @@ export function App() {
       strings.history.moveBoard,
     );
 
-  /* ---------- 메모 ---------- */
+  /* ---------- Notes ---------- */
   const newNoteId = () => {
     let id = "";
     do id = `n${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
@@ -626,8 +626,8 @@ export function App() {
     toast({ text: strings.toast.noteDeleted, action: undoAction });
   };
 
-  /* ---------- 페이지 ---------- */
-  /* ---------- 도형 ---------- */
+  /* ---------- Pages ---------- */
+  /* ---------- Shapes ---------- */
   const shapes = board?.shapes ?? {};
   const visibleShapes = useMemo(
     () => Object.keys(shapes).filter((id) => onPage(shapes[id])).sort((a, b) => (shapes[a].z ?? 0) - (shapes[b].z ?? 0) || (a < b ? -1 : 1)),
@@ -658,7 +658,7 @@ export function App() {
     const zs = Object.values(boardRef.current?.shapes ?? {}).map((x) => x.z ?? 0);
     patchShape(id, { z: to === "front" ? Math.max(0, ...zs) + 1 : Math.min(0, ...zs) - 1 }, to === "front" ? strings.history.shapeFront : strings.history.shapeBack);
   };
-  /** 이미지 도형: 자산에서 고르거나 붙여넣은 그림 */
+  /** Image shape: picked from assets or pasted */
   const addImageShape = (a: { ref: string; url: string }, at?: { x: number; y: number }) => {
     const img = new Image();
     img.onload = () => {
@@ -671,7 +671,7 @@ export function App() {
     img.onerror = () => toast({ tone: "error", text: strings.toast.imageReadFailed });
     img.src = a.url;
   };
-  // 캔버스에 이미지를 붙여넣으면 자산으로 올리고 이미지 도형으로
+  // Images pasted onto the canvas are uploaded as assets and added as image shapes
   useEffect(() => {
     const onPaste = async (e: ClipboardEvent) => {
       if (editFile || (e.target as HTMLElement)?.closest?.("input,textarea,[contenteditable=true]")) return;
@@ -689,7 +689,7 @@ export function App() {
     return () => window.removeEventListener("paste", onPaste);
   });
 
-  /** 가져오기: HTML은 새 보드(파일 그대로), 이미지는 자산 + 이미지 도형 */
+  /** Import: HTML becomes a new board (file as is), images become assets plus image shapes */
   const importFiles = async (files: File[], at: { x: number; y: number }) => {
     let x = Math.round(at.x);
     const made: string[] = [];
@@ -721,7 +721,7 @@ export function App() {
     }
   };
 
-  /* ---------- 페이지(서버 기록) ---------- */
+  /* ---------- Pages (server history) ---------- */
   const pageApi = async (body: Record<string, unknown>, okText?: string) => {
     try {
       const r = await api.post<{ id?: string }>("/api/pages", body);
@@ -773,7 +773,7 @@ export function App() {
     });
   };
 
-  /* ---------- 우클릭 메뉴 ---------- */
+  /* ---------- Context menus ---------- */
   const boardMenuItems = (file: string): MenuItem[] => {
     const b = board!.boards[file];
     const files = selected.includes(file) ? selected : [file];
@@ -835,7 +835,7 @@ export function App() {
       });
     }
   };
-  // 편집 중인 보드 안 요소 우클릭
+  // Right-click on an element inside the board being edited
   elementMenuRef.current = (path, at) => {
     if (!editFile) return;
     const getHash = () => api.get<{ hash: string }>(`/api/element?f=${encodeURIComponent(editFile)}&path=${encodeURIComponent(path)}`).then((r) => r.hash);
@@ -871,11 +871,11 @@ export function App() {
     });
   };
 
-  /** 그 자리 Play 끝: 눌러서 다른 화면으로 갔으면 원래 화면으로 되돌린다 */
+  /** End Play in place: if the user navigated to another screen, go back to the original */
   const stopInline = () => {
     const f = inlinePlay;
     setInlinePlay(null);
-    // 포커스가 iframe 안에 남으면 단축키가 앱에 오지 않는다
+    // If focus stays inside the iframe, shortcuts never reach the app
     (document.activeElement as HTMLElement | null)?.blur?.();
     const c = document.querySelector<HTMLElement>(".canvas");
     if (c) {
@@ -884,7 +884,7 @@ export function App() {
     }
     if (f) setReloadKeys((k) => ({ ...k, [f]: (k[f] ?? 0) + 1 }));
   };
-  // 그 자리 Play 중에는 iframe 안에서 누른 Esc도 받는다(다른 화면으로 넘어가도)
+  // During Play in place, also catch Esc pressed inside the iframe (even after navigating)
   useEffect(() => {
     if (!inlinePlay) return;
     const frame = frames.current.get(inlinePlay);
@@ -905,14 +905,14 @@ export function App() {
   }, [inlinePlay, frameTick]);
   const stopInlineRef = useRef(() => {});
   stopInlineRef.current = stopInline;
-  /** ⌘\: 양쪽 패널 함께 숨기기·보이기 */
+  /** ⌘\: hide or show both panels together */
   const [rightOpen, setRightOpen] = useState(true);
   const toggleUi = () => {
     const hide = leftOpen || rightOpen;
     setLeftOpen(!hide);
     setRightOpen(!hide);
   };
-  /** F6: 도구 막대 → 왼쪽 패널 → 캔버스 → 오른쪽 패널 사이 포커스 옮기기 */
+  /** F6: cycle focus between toolbar → left panel → canvas → right panel */
   const cycleFocus = (back: boolean) => {
     const regions = [".toolbar", ".left", ".canvas", ".right"].map((q) => document.querySelector<HTMLElement>(q)).filter(Boolean) as HTMLElement[];
     const cur = regions.findIndex((r) => r.contains(document.activeElement));
@@ -931,7 +931,7 @@ export function App() {
     }
   };
 
-  /* ---------- 디자인 시스템·검사·스냅숏 ---------- */
+  /* ---------- Design system, checks, snapshots ---------- */
   const saveTokens = async (t: Tokens, label: string) => {
     try {
       await api.put("/api/tokens", { ...t, label });
@@ -941,7 +941,7 @@ export function App() {
       toast({ tone: "error", text: String((e as Error).message) });
     }
   };
-  /** 검사 목록에서 고르면 그 보드를 편집 모드로 열고 그 요소를 고른다 */
+  /** Picking from a check list opens that board in edit mode and selects the element */
   const pickPath = (file: string, path: string) => {
     pendingPick.current = { file, path };
     if (editFile !== file) setEditFile(file);
@@ -999,7 +999,7 @@ export function App() {
     });
   };
 
-  /* ---------- 단축키 ---------- */
+  /* ---------- Shortcuts ---------- */
   const keyRef = useRef<(e: KeyboardEvent) => void>(() => {});
   keyRef.current = (e: KeyboardEvent) => {
     if (!board || ask.state || focusFile || playFile) return;
@@ -1016,7 +1016,7 @@ export function App() {
     if (cmd && k === "j") return run(() => (rightTab === "chat" ? setRightTab("inspect") : openChat()));
     if (cmd && k === "k") return run(() => { setLeftOpen(true); setTimeout(() => searchRef.current?.focus(), 0); });
     if (cmd && k === "a" && !editFile) return run(() => select(visibleBoards));
-    // 편집 중 ⌘A: 지금 고른 요소의 형제 모두(없으면 보드 맨 위 요소들)
+    // ⌘A while editing: all siblings of the selected element (or the board's top-level elements)
     if (cmd && k === "a" && editFile) {
       const doc = frames.current.get(editFile)?.contentDocument;
       const cur = edit.state.selection?.path;
@@ -1053,7 +1053,7 @@ export function App() {
       return;
     }
     if (e.key === "F6") return run(() => cycleFocus(e.shiftKey));
-    // Tab: 캔버스에 포커스가 있으면 다음·이전 보드, Enter: 편집(편집 중엔 첫 자식, Shift는 부모)
+    // Tab: next/previous board when the canvas has focus. Enter: edit (while editing: first child, Shift for parent)
     const ae = document.activeElement as HTMLElement | null;
     const inCanvas = !ae || ae === document.body || !!ae.closest?.(".canvas") || ae.tagName === "IFRAME";
     if (e.key === "Tab" && inCanvas && !editFile && visibleBoards.length) {
@@ -1090,7 +1090,7 @@ export function App() {
       if (selected.length && !editFile) return run(() => void deleteBoards(selected));
       return;
     }
-    // 편집 중 화살표: 형제·부모·자식으로 선택 옮기기, Alt+↑↓는 형제 사이 순서 바꾸기
+    // Arrows while editing: move selection to sibling, parent or child; Alt+↑↓ reorders among siblings
     if (e.key.startsWith("Arrow") && editFile && edit.state.selection) {
       const sel = edit.state.selection;
       const doc = frames.current.get(editFile)?.contentDocument;
@@ -1136,7 +1136,7 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  /* ---------- 보드 위 오버레이: 편집 외곽선·선택, 댓글 핀 ---------- */
+  /* ---------- Overlays on boards: edit outlines, selection, comment pins ---------- */
   const renderOverlay = (f: string) => {
     const pins = comments.filter((c) => c.file === f && !c.resolved);
     const doc = frames.current.get(f)?.contentDocument;
@@ -1473,7 +1473,7 @@ export function App() {
               />
             }
             iframeRef={(f, el) => {
-              // ref 콜백은 렌더마다 null → el로 다시 불린다. 정말 새 iframe일 때만 갱신한다
+              // The ref callback is called again with null → el on every render. Update only for a genuinely new iframe
               if (el && frames.current.get(f) !== el) {
                 frames.current.set(f, el);
                 setFrameTick((t) => t + 1);
@@ -1528,7 +1528,7 @@ export function App() {
             try {
               localStorage.setItem("design-canvas:author", r.value.trim());
             } catch {
-              /* 무시 */
+              /* ignore */
             }
           }}
           onAskAI={(c) => {
@@ -1711,11 +1711,11 @@ export function App() {
   );
 }
 
-/** 옮긴 뒤 요소의 경로: 같은 부모 안 index, 그리고 잘라낸 자리 뒤의 조상 인덱스는 하나씩 당겨진다 */
+/** Element path after a move: index within the same parent; ancestor indexes after the cut position shift down by one */
 export function movedPath(from: string, toParent: string, index: number) {
   const f = from.split("/").map(Number);
   const t = toParent === "" ? [] : toParent.split("/").map(Number);
-  // 대상 부모 경로가 잘라낸 요소의 (나중) 형제 아래를 지나면 그 단계 인덱스를 하나 줄인다
+  // If the target parent path passes under a later sibling of the cut element, decrement that step's index
   const depth = f.length - 1;
   if (t.length > depth && t.slice(0, depth).every((v, i) => v === f[i]) && t[depth] > f[depth]) t[depth]--;
   return [...t, index].join("/");

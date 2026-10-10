@@ -1,5 +1,5 @@
 // AI-generated with Claude Code, 2026-10-09, reviewed by Hyun Park
-// 오른쪽 패널: 선택 정보·복사·스크린샷, 댓글. (M5에서 속성·레이어가 붙는다)
+// Right panel: selection info, copy, screenshot, comments. (Properties and layers attach here since M5)
 import { Children, useState, type ReactNode } from "react";
 
 import { api } from "./api";

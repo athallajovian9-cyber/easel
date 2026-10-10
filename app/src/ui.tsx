@@ -1,11 +1,11 @@
 // AI-generated with Claude Code, 2026-10-09, reviewed by Hyun Park
-// 공용 UI: 토스트, 우클릭 메뉴, 앱 안 입력·확인 창. 키보드(Esc·Enter·화살표)와 aria를 지원한다.
+// Shared UI: toasts, context menus, in-app prompt and confirm dialogs. Supports keyboard (Esc, Enter, arrows) and aria.
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { Icon, type IconName } from "./icons";
 import { strings } from "./strings";
 
-/* ---------------- 토스트 ---------------- */
+/* ---------------- Toasts ---------------- */
 export type Toast = { id: number; text: string; tone?: "info" | "ok" | "error"; action?: { label: string; run: () => void } };
 type ToastApi = (t: Omit<Toast, "id">) => void;
 const ToastCtx = createContext<ToastApi>(() => {});
@@ -44,7 +44,7 @@ export function ToastHost({ children }: { children: ReactNode }) {
   );
 }
 
-/* ---------------- 우클릭 메뉴 ---------------- */
+/* ---------------- Context menu ---------------- */
 export type MenuItem = { label: string; icon?: IconName; shortcut?: string; disabled?: boolean; danger?: boolean; run: () => void } | "sep";
 export type MenuState = { x: number; y: number; items: MenuItem[]; title?: string } | null;
 
@@ -125,7 +125,7 @@ export function ContextMenu({ menu, onClose }: { menu: MenuState; onClose: () =>
   );
 }
 
-/* ---------------- 입력·확인 창 ---------------- */
+/* ---------------- Prompt and confirm dialogs ---------------- */
 export type DialogState =
   | { kind: "prompt"; title: string; label?: string; value: string; hint?: string; ok: string; extra?: { label: string; checked: boolean }; resolve: (v: { value: string; extra: boolean } | null) => void }
   | { kind: "confirm"; title: string; body: string; ok: string; danger?: boolean; resolve: (ok: boolean) => void }
@@ -196,7 +196,7 @@ export function Dialog({ state, onClose }: { state: DialogState; onClose: () => 
   );
 }
 
-/** Promise로 쓰는 창: const v = await ask.prompt({...}) */
+/** Promise-based dialogs: const v = await ask.prompt({...}) */
 export function useDialog() {
   const [state, setState] = useState<DialogState>(null);
   const prompt = (o: { title: string; label?: string; value?: string; hint?: string; ok?: string; extra?: { label: string; checked: boolean } }) =>

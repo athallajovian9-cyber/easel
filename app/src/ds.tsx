@@ -1,5 +1,5 @@
 // AI-generated with Claude Code, 2026-10-09, reviewed by Hyun Park
-// 디자인 시스템: 토큰 등록·테마, 토큰 밖 값 검사, 접근성 검사(누르는 영역·명암비·라벨), 보드 Tweaks.
+// Design system: token registration and themes, off-token checks, accessibility checks (touch targets, contrast, labels), board tweaks.
 import { useEffect, useState } from "react";
 
 import { api } from "./api";
@@ -30,7 +30,7 @@ export function useTokens(version: number) {
 }
 export const themeColors = (t: Tokens | null) => Object.entries(t?.themes[t.active] ?? {}).map(([name, value]) => ({ name, value }));
 
-/* ---------- 색·명암 ---------- */
+/* ---------- Color and contrast ---------- */
 export function parseColor(c: string): [number, number, number, number] | null {
   const s = c.trim().toLowerCase();
   let m = s.match(/^#([0-9a-f]{3,8})$/);
@@ -63,7 +63,7 @@ export const toHex = (c: string) => {
   return p && p[3] === 1 ? "#" + p.slice(0, 3).map((n) => Math.round(n).toString(16).padStart(2, "0")).join("").toUpperCase() : null;
 };
 
-/** 속성 값 하나가 토큰 밖인지(속성 패널 ⚠ 표시) */
+/** Whether a single property value is off tokens (⚠ in the Properties panel) */
 export function offToken(prop: string, value: string, t: Tokens | null): string | null {
   if (!t || !value) return null;
   const colors = new Set(themeColors(t).map((c) => toHex(c.value)));
@@ -79,7 +79,7 @@ export function offToken(prop: string, value: string, t: Tokens | null): string 
   return null;
 }
 
-/* ---------- 접근성 검사(iframe 문서) ---------- */
+/* ---------- Accessibility checks (iframe document) ---------- */
 export type A11yItem = { path: string; kind: "target" | "contrast" | "label"; message: string };
 export function checkA11y(doc: Document, minTarget = 48): A11yItem[] {
   const win = doc.defaultView!;
@@ -115,7 +115,7 @@ export function checkA11y(doc: Document, minTarget = 48): A11yItem[] {
       if (p != null) out.push({ path: p, kind: "label", message: strings.checks.noAlt });
     }
   }
-  // 글자 명암: 글자를 직접 가진 요소
+  // Text contrast: elements that directly contain text
   const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
   const seen = new Set<Element>();
   for (let t = walker.nextNode(); t; t = walker.nextNode()) {
@@ -124,7 +124,7 @@ export function checkA11y(doc: Document, minTarget = 48): A11yItem[] {
     seen.add(el);
     const cs = win.getComputedStyle(el);
     const bg = bgOf(el);
-    if (!bg) continue; // 사진 위 글자는 건너뜀
+    if (!bg) continue; // Skip text over images
     const ratio = contrast(cs.color, bg);
     if (ratio == null) continue;
     const size = parseFloat(cs.fontSize);
@@ -138,7 +138,7 @@ export function checkA11y(doc: Document, minTarget = 48): A11yItem[] {
   return out;
 }
 
-/* ---------- 왼쪽 '토큰' 탭: 등록·테마 ---------- */
+/* ---------- Left 'Tokens' tab: registration and themes ---------- */
 export function TokenPanel({ tokens, onSave }: { tokens: Tokens; onSave: (t: Tokens, label: string) => void }) {
   const [t, setT] = useState(tokens);
   useEffect(() => setT(tokens), [tokens]);
@@ -247,7 +247,7 @@ export function TokenPanel({ tokens, onSave }: { tokens: Tokens; onSave: (t: Tok
   );
 }
 
-/** 가져오기: 우리 tokens.json 형식, 또는 {이름: "#hex"}·{color:{이름:{value}}} 같은 단순한 변수 JSON */
+/** Import: our tokens.json format, or simple variable JSON like {name: "#hex"} or {color:{name:{value}}} */
 export function importTokens(j: unknown, base: Tokens): Tokens {
   const o = j as Record<string, unknown>;
   if (o && typeof o === "object" && o.themes && typeof o.themes === "object") return { ...base, ...(o as Partial<Tokens>), active: (o.active as string) ?? Object.keys(o.themes as object)[0] } as Tokens;
@@ -265,7 +265,7 @@ export function importTokens(j: unknown, base: Tokens): Tokens {
   return { ...base, themes: { ...base.themes, [strings.tokens.importedTheme]: colors }, active: strings.tokens.importedTheme };
 }
 
-/* ---------- 오른쪽: 검사 결과 목록(토큰·접근성) ---------- */
+/* ---------- Right: check results (tokens, accessibility) ---------- */
 export function CheckList({ title, items, empty, onPick, onAskAI }: { title: string; items: { path?: string; message: string; line?: number }[] | null; empty: string; onPick: (path: string) => void; onAskAI?: () => void }) {
   return (
     <section className="board-opts" aria-label={title}>

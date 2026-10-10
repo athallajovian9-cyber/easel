@@ -1,5 +1,5 @@
 // AI-generated with Claude Code, 2026-10-09, reviewed by Hyun Park
-// 서버 API·WS 호출. PLAN.md 4장.
+// Server API and WebSocket calls. PLAN.md section 4.
 import type { Board, BoardResponse } from "./types";
 
 export const clientId = Math.random().toString(36).slice(2);
@@ -36,7 +36,7 @@ export type ServerEvent =
   | { type: "tokens-changed" }
   | { type: "chat"; id: string; ev: import("./chat").ChatEvent };
 
-/** 끊기면 1초 뒤 다시 붙는 WS */
+/** WebSocket that reconnects 1 second after disconnecting */
 export function connectEvents(onEvent: (e: ServerEvent) => void) {
   let ws: WebSocket | null = null;
   let closed = false;
@@ -46,7 +46,7 @@ export function connectEvents(onEvent: (e: ServerEvent) => void) {
       try {
         onEvent(JSON.parse(m.data));
       } catch {
-        /* 무시 */
+        /* ignore */
       }
     };
     ws.onclose = () => {

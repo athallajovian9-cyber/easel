@@ -1,5 +1,5 @@
 // AI-generated with Claude Code, 2026-10-09, reviewed by Hyun Park
-// 자산 보관함: docs/design/assets/의 이미지·폰트 목록, 올리기(단추·끌어 놓기), 고르기(이미지 바꾸기).
+// Asset library: images and fonts in docs/design/assets/, upload (button or drag and drop), pick (replace image).
 import { useCallback, useEffect, useState } from "react";
 
 import { api } from "./api";
@@ -32,7 +32,7 @@ export async function uploadAssets(files: FileList | File[]) {
 
 const kb = (n: number) => (n > 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)}MB` : `${Math.max(1, Math.round(n / 1024))}KB`);
 
-/** 목록(왼쪽 패널 탭이나 고르기 창 안) */
+/** Grid (in the left panel tab or inside the picker dialog) */
 export function AssetGrid(p: { version: number; onPick?: (a: Asset) => void; pickLabel?: string; onError: (msg: string) => void; onUploaded?: (a: Asset[]) => void; only?: "image" }) {
   const { list, reload } = useAssets(p.version);
   const [busy, setBusy] = useState(false);
@@ -95,7 +95,7 @@ export function AssetGrid(p: { version: number; onPick?: (a: Asset) => void; pic
   );
 }
 
-/** 이미지 바꾸기 창 */
+/** Replace image dialog */
 export function AssetPicker({ open, version, onClose, onPick, onError }: { open: boolean; version: number; onClose: () => void; onPick: (a: Asset) => void; onError: (m: string) => void }) {
   useEffect(() => {
     if (!open) return;

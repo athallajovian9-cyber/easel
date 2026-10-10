@@ -1,5 +1,5 @@
 // AI-generated with Claude Code, 2026-10-09, reviewed by Hyun Park
-// 레이어 목록: 원본 HTML의 요소 트리. 클릭하면 선택, 끌어서 다른 항목 위에 놓으면 그 앞으로 옮긴다(move). PLAN.md 5장.
+// Layer list: element tree of the source HTML. Click to select; drop onto another item to move in front of it (move). PLAN.md section 5.
 import { useEffect, useState } from "react";
 
 import { api } from "./api";
@@ -24,7 +24,7 @@ export function Layers(props: { file: string; version: number; selected: string[
       .catch(() => setTree([]));
   }, [props.file, props.version]);
 
-  // 선택한 요소가 보이게 조상을 펼친다
+  // Expand ancestors so the selected element is visible
   useEffect(() => {
     const next: Record<string, boolean> = {};
     for (const p of props.selected) {
@@ -38,12 +38,12 @@ export function Layers(props: { file: string; version: number; selected: string[
     if (!dragging || dragging === target || target.startsWith(dragging + "/")) return;
     const toParent = parentOf(target);
     let index = indexOf(target);
-    // 서버 index는 자기를 뺀 형제 순서다: 같은 부모에서 뒤로 옮길 때는 하나 줄인다
+    // The server index is the sibling order excluding the item itself: subtract one when moving later within the same parent
     if (parentOf(dragging) === toParent && indexOf(dragging) < index) index -= 1;
     props.onMove(dragging, toParent, index);
   };
 
-  // 화살표 탐색: 보이는 줄 순서
+  // Arrow navigation: order of visible rows
   const visible: Node[] = [];
   const byPath = new Map<string, Node>();
   const flat = (ns: Node[]) => {

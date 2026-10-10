@@ -1,6 +1,6 @@
 // AI-generated with Claude Code, 2026-10-09, reviewed by Hyun Park
-// 편집 중 선택한 요소의 손잡이: 끌어 옮기기(흐름 안에서는 순서 바꾸기·다른 상자로, 절대 위치면 left/top), 크기(너비·높이).
-// flex·grid 밖으로 끌어내면 원래 부모와 형제의 크기를 고정해 다른 요소가 움직이지 않게 한다.
+// Handles for the selected element while editing: drag to move (reorder or move into another box in flow, left/top when absolutely positioned) and resize (width, height).
+// Dragging out of a flex or grid container pins the original parent's and siblings' sizes so other elements don't shift.
 import { useRef, useState, type PointerEvent as RPointerEvent } from "react";
 
 import { elementAt, pathOf, rectOf, type Rect } from "./editor";
@@ -13,7 +13,7 @@ export type DropPlan = { toParentPath: string; index: number; freeze: Freeze[] }
 const parentPath = (p: string) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
 const px = (n: number) => `${Math.round(n)}px`;
 
-/** 놓을 곳 계산: 가리킨 요소의 앞·뒤. 상자(조상이거나 Alt)를 가리키면 그 안에서 포인터 위치로 순서를 정한다 */
+/** Drop target: before or after the hovered element. Over a box (an ancestor, or with Alt), the pointer position picks the order inside it */
 export function planDrop(doc: Document, dragged: Element, x: number, y: number, inside: boolean): (DropPlan & { line: Rect }) | null {
   const prev = (dragged as HTMLElement).style.pointerEvents;
   (dragged as HTMLElement).style.pointerEvents = "none";
@@ -26,7 +26,7 @@ export function planDrop(doc: Document, dragged: Element, x: number, y: number, 
     return /flex/.test(cs.display) && !cs.flexDirection.startsWith("column");
   };
   const VOID = /^(img|input|br|hr|textarea|select|svg|path|video|iframe)$/i;
-  // 상자 안: 자식들 가운데 어디에 끼울지
+  // Inside a box: where among the children to insert
   const intoContainer = (c: Element) => {
     const cp = c === doc.body ? "" : pathOf(c);
     if (cp == null) return null;
@@ -65,7 +65,7 @@ export function planDrop(doc: Document, dragged: Element, x: number, y: number, 
   return { toParentPath: pp, index, freeze: [], line };
 }
 
-/** 원래 부모가 flex·grid이고 다른 부모로 옮기면, 부모와 남는 형제의 지금 크기를 적어 둔다(inline 크기가 이미 있으면 그대로) */
+/** When moving out of a flex/grid parent into another parent, record the current sizes of the parent and remaining siblings (keeping existing inline sizes) */
 export function freezeFor(doc: Document, dragged: Element, toParentPath: string): Freeze[] {
   const parent = dragged.parentElement;
   if (!parent || parent === doc.body) return [];
@@ -129,7 +129,7 @@ export function EditHandles(p: {
         return;
       }
       setGhost({ ...p.rect, x: p.rect.x + dx, y: p.rect.y + dy });
-      // 포인터가 가리키는 iframe 안 좌표
+      // Pointer coordinates inside the iframe
       const fr = (p.doc.defaultView?.frameElement as HTMLElement | null)?.getBoundingClientRect();
       const k = fr ? fr.width / (p.doc.defaultView!.innerWidth || fr.width) : p.zoom;
       const ix = fr ? (e.clientX - fr.left) / k : p.rect.x + dx;
@@ -139,7 +139,7 @@ export function EditHandles(p: {
       setLine(plan?.line ?? null);
       return;
     }
-    // 크기: 끄는 동안은 화면에만 적용하고, 놓을 때 원본에 쓴다
+    // Resize: apply only on screen while dragging, write to the source on release
     if (d.kind !== "s") d.el.style.width = px(Math.max(8, d.w + dx));
     if (d.kind !== "e") d.el.style.height = px(Math.max(8, d.h + dy));
   };
@@ -202,7 +202,7 @@ export function EditHandles(p: {
   );
 }
 
-/** 정렬: 부모 배치에 맞춰 align-self 또는 margin auto로 */
+/** Align: via align-self or margin auto depending on the parent layout */
 export function alignOps(doc: Document, path: string, hash: string, dir: "left" | "hcenter" | "right" | "top" | "vcenter" | "bottom") {
   const el = elementAt(doc, path);
   const parent = el?.parentElement;
@@ -214,14 +214,14 @@ export function alignOps(doc: Document, path: string, hash: string, dir: "left" 
   const pos = dir === "left" || dir === "top" ? "start" : dir === "right" || dir === "bottom" ? "end" : "center";
   const self = { start: "flex-start", center: "center", end: "flex-end" }[pos];
   const set = (prop: string, value: string) => ({ op: "setStyle", path, hash, prop, value });
-  // 교차 축이면 align-self, 주 축이거나 블록이면 margin auto
+  // Cross axis uses align-self; main axis or block uses margin auto
   if (flex && (horizontal ? column : !column)) return [set("align-self", self)];
   if (horizontal) {
     if (pos === "start") return [set("margin-left", "0"), set("margin-right", "auto")];
     if (pos === "end") return [set("margin-left", "auto"), set("margin-right", "0")];
     return [set("margin-left", "auto"), set("margin-right", "auto")];
   }
-  if (!flex) return null; // 블록 흐름에서 세로 정렬은 뜻이 없다
+  if (!flex) return null; // Vertical alignment has no meaning in block flow
   if (pos === "start") return [set("margin-top", "0"), set("margin-bottom", "auto")];
   if (pos === "end") return [set("margin-top", "auto"), set("margin-bottom", "0")];
   return [set("margin-top", "auto"), set("margin-bottom", "auto")];

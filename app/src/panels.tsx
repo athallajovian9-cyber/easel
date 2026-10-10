@@ -1,5 +1,5 @@
 // AI-generated with Claude Code, 2026-10-09, reviewed by Hyun Park
-// 왼쪽 패널(페이지·보드 목록·검색), 미니맵, 보드 옵션, 한 보드 전체 화면 보기.
+// Left panel (pages, board list, search), minimap, board options, single-board focus view.
 import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
 
 import type { Rect } from "./Canvas";
@@ -7,7 +7,7 @@ import { Icon } from "./icons";
 import type { Board, BoardItem, Page, View } from "./types";
 import { strings } from "./strings";
 
-/* ---------------- 왼쪽 패널 ---------------- */
+/* ---------------- Left panel ---------------- */
 export const LeftPanel = forwardRef<HTMLInputElement, {
   board: Board;
   pages: Page[];
@@ -122,7 +122,7 @@ export const LeftPanel = forwardRef<HTMLInputElement, {
   );
 });
 
-/* ---------------- 미니맵 ---------------- */
+/* ---------------- Minimap ---------------- */
 export function Minimap({ rects, selected, view, size, onJump }: { rects: (Rect & { file: string })[]; selected: string[]; view: View; size: { w: number; h: number }; onJump: (x: number, y: number) => void }) {
   const W = 200;
   const H = 130;
@@ -139,7 +139,7 @@ export function Minimap({ rects, selected, view, size, onJump }: { rects: (Rect 
   const dragging = useRef(false);
   const jump = (e: React.PointerEvent) => {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const k = r.width / W; // 좁은 창에서는 CSS로 줄여 그린다
+    const k = r.width / W; // In narrow windows CSS scales it down
     onJump(((e.clientX - r.left) / k - ox) / s + box.x, ((e.clientY - r.top) / k - oy) / s + box.y);
   };
   return (
@@ -165,7 +165,7 @@ export function Minimap({ rects, selected, view, size, onJump }: { rects: (Rect 
   );
 }
 
-/* ---------------- 보드 옵션 ---------------- */
+/* ---------------- Board options ---------------- */
 export function BoardOptions(p: {
   file: string;
   item: BoardItem;
@@ -270,7 +270,7 @@ function NumField({ label, value, min, max, onCommit }: { label: string; value: 
   );
 }
 
-/* ---------------- 한 보드 전체 화면 보기 ---------------- */
+/* ---------------- Single-board focus view ---------------- */
 export function FocusView({ board, file, onClose, onNav }: { board: Board; file: string; onClose: () => void; onNav: (f: string) => void }) {
   const b = board.boards[file];
   const ref = useRef<HTMLDivElement>(null);

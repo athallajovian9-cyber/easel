@@ -1,5 +1,5 @@
 // AI-generated with Claude Code, 2026-10-09, reviewed by Hyun Park
-// 편집 모드 훅: iframe 안에서 마우스 올림 외곽선, 클릭 선택(Shift 다중), Esc 상위 선택, 선택을 서버에 알림.
+// Edit mode hook: hover outlines inside the iframe, click to select (Shift for several), Esc to select parent, reports selection to the server.
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { api } from "./api";
@@ -22,7 +22,7 @@ export function useEditMode(editFile: string | null, getFrame: (f: string) => HT
   const hooksRef = useRef(hooks);
   hooksRef.current = hooks;
 
-  /** 선택 경로로 사각형을 다시 계산(스크롤·새로 고침 뒤) */
+  /** Recompute rects from selected paths (after scroll or reload) */
   const refresh = useCallback(() => {
     if (!editFile) return;
     const doc = getFrame(editFile)?.contentDocument;
@@ -62,12 +62,12 @@ export function useEditMode(editFile: string | null, getFrame: (f: string) => HT
     [editFile, getFrame],
   );
 
-  // 편집 보드가 바뀌면 선택을 비운다
+  // Clear selection when the edited board changes
   useEffect(() => {
     setState({ hover: null, paths: [], rects: [], selection: null, error: null });
   }, [editFile]);
 
-  // iframe 문서에 이벤트를 단다(불러올 때마다 다시)
+  // Attach events to the iframe document (again on every load)
   useEffect(() => {
     if (!editFile) return;
     const frame = getFrame(editFile);
@@ -89,7 +89,7 @@ export function useEditMode(editFile: string | null, getFrame: (f: string) => HT
       };
       const onLeave = () => setState((s) => ({ ...s, hover: null }));
       const onClick = (e: MouseEvent) => {
-        // 편집 모드에서는 링크·버튼이 동작하지 않게 막는다
+        // Block links and buttons in edit mode
         e.preventDefault();
         e.stopPropagation();
         const t = target(e);
@@ -104,7 +104,7 @@ export function useEditMode(editFile: string | null, getFrame: (f: string) => HT
         const p = t ? pathOf(t) : null;
         if (t && p != null) hooksRef.current?.onTextEdit?.(t, p);
       };
-      // 우클릭: 그 요소를 선택하고 앱 메뉴를 연다. iframe 안 좌표를 화면 좌표로 바꾼다
+      // Right-click: select the element and open the app menu, converting iframe coordinates to screen coordinates
       const onCtx = (e: MouseEvent) => {
         e.preventDefault();
         const t = target(e);
@@ -116,18 +116,18 @@ export function useEditMode(editFile: string | null, getFrame: (f: string) => HT
         hooksRef.current?.onContext?.(p, { clientX: r.left + e.clientX * s, clientY: r.top + e.clientY * s });
       };
       const onKey = (e: KeyboardEvent) => {
-        if (e.isComposing || (e.target as HTMLElement)?.isContentEditable) return; // 한글 조합 중·글자 고치는 중에는 단축키를 넘기지 않는다
+        if (e.isComposing || (e.target as HTMLElement)?.isContentEditable) return; // Don't forward shortcuts during IME composition or while editing text
         if (e.key === "Escape") {
           const cur = pathsRef.current;
           if (cur.length) {
-            // 선택이 있으면 상위로만 가고, 앱에는 넘기지 않는다(편집 모드 끝내기는 선택이 없을 때 Esc)
+            // With a selection, only go to the parent and don't forward to the app (Esc with no selection exits edit mode)
             const last = cur[cur.length - 1];
             const up = last.includes("/") ? last.slice(0, last.lastIndexOf("/")) : null;
             void select(up == null ? [] : [up]);
             return;
           }
         }
-        // 나머지 단축키는 앱 창으로 넘긴다(⌘Z 등)
+        // Forward other shortcuts to the app window (⌘Z etc.)
         window.dispatchEvent(new KeyboardEvent("keydown", { key: e.key, code: e.code, metaKey: e.metaKey, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey, altKey: e.altKey }));
         if (/^(Arrow|Delete|Backspace)/.test(e.key) || ((e.metaKey || e.ctrlKey) && /^[zydcvg]$/i.test(e.key))) e.preventDefault();
       };
@@ -151,7 +151,7 @@ export function useEditMode(editFile: string | null, getFrame: (f: string) => HT
     };
     const onLoad = () => {
       attach();
-      // 파일이 바뀌어 다시 불러왔으면 같은 경로를 다시 선택해 새 해시를 받는다
+      // After a reload due to a file change, reselect the same paths to get new hashes
       if (pathsRef.current.length) void select(pathsRef.current);
     };
     if (frame.contentDocument?.readyState === "complete") attach();
@@ -165,7 +165,7 @@ export function useEditMode(editFile: string | null, getFrame: (f: string) => HT
   return { state, select, refresh, setError: (error: string | null) => setState((s) => ({ ...s, error })) };
 }
 
-/** 요소 종류와 사람이 읽는 이름(MCP get_selection의 kind·label) */
+/** Element kind and human-readable name (kind and label for MCP get_selection) */
 export function kindLabel(el: Element) {
   const tag = el.tagName.toLowerCase();
   const role = el.getAttribute("role");

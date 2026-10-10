@@ -1,5 +1,5 @@
 // AI-generated with Claude Code, 2026-10-09, reviewed by Hyun Park
-// 무한 캔버스: 도구(선택·손·보드·제목·메모), 이동·확대, 다중 선택·함께 옮기기·스냅 안내선, 보드(iframe)·이름표·크기, 메모. PLAN.md 5장.
+// Infinite canvas: tools (select, hand, board, title, note), pan and zoom, multi-select, group move, snap guides, boards (iframes) with labels and sizes, notes. PLAN.md section 5.
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as RMouseEvent, type PointerEvent as RPointerEvent, type ReactNode } from "react";
 
 import { stickyBg } from "./drawing";
@@ -7,10 +7,10 @@ import { Icon } from "./icons";
 import type { Board, BoardItem, Note, Tool, View } from "./types";
 import { strings } from "./strings";
 
-// PLAN은 10%였지만 보드 98장 전체(높이 약 17,700)를 한 화면에 보이려고 4%까지 허용
+// PLAN said 10%, but allow down to 4% to fit all 98 boards (about 17,700 tall) on one screen
 export const MIN_ZOOM = 0.04;
 export const MAX_ZOOM = 4;
-/** 이 확대율보다 작으면 iframe 대신 빈 틀(PLAN.md 9장) */
+/** Below this zoom, show an empty frame instead of the iframe (PLAN.md section 9) */
 export const IFRAME_MIN_ZOOM = 0.25;
 const SNAP_PX = 6;
 
@@ -31,7 +31,7 @@ type Props = {
   selected: string[];
   selectedNote: string | null;
   editFile: string | null;
-  /** 그 자리에서 Play 중인 보드(iframe을 눌러 볼 수 있음) */
+  /** Board playing in place (the iframe is interactive) */
   playing?: string | null;
   reloadKeys: Record<string, number>;
   onSelect: (files: string[], mode: "replace" | "toggle" | "add") => void;
@@ -46,7 +46,7 @@ type Props = {
   onCreateNote: (kind: Note["kind"], at: { x: number; y: number }) => void;
   onContext: (t: ContextTarget, e: { clientX: number; clientY: number }) => void;
   renderBoardOverlay?: (f: string) => ReactNode;
-  /** 보드 위에 그리는 것(도형) — world 좌표 */
+  /** Things drawn over boards (shapes) — world coordinates */
   worldLayer?: ReactNode;
   iframeRef?: (f: string, el: HTMLIFrameElement | null) => void;
   onSize?: (s: { w: number; h: number }) => void;
@@ -57,7 +57,7 @@ export function Canvas(p: Props) {
   const [size, setSize] = useState({ w: 1200, h: 800 });
   const [space, setSpace] = useState(false);
   const [guides, setGuides] = useState<Guide[]>([]);
-  const [draft, setDraft] = useState<Rect | null>(null); // 보드 그리기·선택 영역
+  const [draft, setDraft] = useState<Rect | null>(null); // Board drawing or selection marquee
   const draftRef = useRef<Rect | null>(null);
   const gesture = useRef<Gesture>(null);
 
@@ -72,7 +72,7 @@ export function Canvas(p: Props) {
     return () => ro.disconnect();
   }, []);
 
-  // 휠: ⌘/Ctrl(트랙패드 핀치 포함)이면 커서 기준 확대, 아니면 이동
+  // Wheel: with ⌘/Ctrl (including trackpad pinch) zoom around the cursor, otherwise pan
   useEffect(() => {
     const el = rootRef.current!;
     const onWheel = (e: WheelEvent) => {
@@ -95,7 +95,7 @@ export function Canvas(p: Props) {
     return () => el.removeEventListener("wheel", onWheel);
   }, [p.setView]);
 
-  // 스페이스를 누르고 있으면 손 도구
+  // Holding Space switches to the hand tool
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.code === "Space" && !isTyping(e) && !e.repeat) {
@@ -159,7 +159,7 @@ export function Canvas(p: Props) {
     setDraftBoth(null);
     if (g.kind === "draw") {
       const w = toWorld(e.clientX, e.clientY);
-      // 끌지 않고 누르기만 하면 390×844 기본 크기
+      // A click without dragging uses the default 390×844 size
       p.onCreateBoard(g.moved && r && r.w > 20 && r.h > 20 ? roundRect(r) : { x: Math.round(w.x), y: Math.round(w.y), w: 390, h: 844 });
       p.setTool("select");
       return;
@@ -175,7 +175,7 @@ export function Canvas(p: Props) {
     p.onSelect(hit, g.additive ? "add" : "replace");
   };
 
-  /* ---------- 선택한 보드 함께 옮기기 + 스냅 ---------- */
+  /* ---------- Move selected boards together + snapping ---------- */
   const groupDrag = useRef<null | { sx: number; sy: number; origins: Record<string, { x: number; y: number }>; moved: boolean }>(null);
   const startGroupDrag = (e: RPointerEvent, file: string) => {
     const sel = p.selected.includes(file) ? p.selected : [file];
@@ -192,7 +192,7 @@ export function Canvas(p: Props) {
     if (!g.moved && Math.abs(dx) + Math.abs(dy) < 3 / view.zoom) return;
     g.moved = true;
     const files = Object.keys(g.origins);
-    // 스냅: 움직이는 묶음의 왼·가운데·오른쪽(위·가운데·아래)을 다른 보드의 같은 선에 맞춘다(Alt를 누르면 끔)
+    // Snap: align the moving group's left/center/right (top/middle/bottom) to the same lines on other boards (hold Alt to disable)
     const moving = files.map((f) => ({ ...p.board.boards[f], x: g.origins[f].x + dx, y: g.origins[f].y + dy }));
     const box = bounds(moving);
     const others = p.visibleBoards.filter((f) => !files.includes(f)).map((f) => p.board.boards[f]);
@@ -448,8 +448,8 @@ function BoardView(props: {
   );
 }
 
-/** 파일이 바뀌면 같은 iframe을 다시 불러오고 스크롤 위치를 되돌린다(PLAN.md 5장 즉시 반영) */
-/** 축소 미리보기: 서버가 만든 작은 그림(처음에는 몇 초 걸릴 수 있음) */
+/** When the file changes, reload the same iframe and restore the scroll position (PLAN.md section 5, live updates) */
+/** Zoomed-out preview: a thumbnail made by the server (may take a few seconds at first) */
 function Thumb({ file, v }: { file: string; v: number }) {
   const [ok, setOk] = useState(true);
   if (!ok) return null;
@@ -526,7 +526,7 @@ function NoteView(props: { note: Note; zoom: number; selected: boolean; onSelect
     const text = el.innerText;
     if (text !== n.text) props.onMove({ text }, true);
   };
-  // 제목: maxW·maxH를 넘으면 글자를 줄인다(최소 12px)
+  // Title: shrink text past maxW/maxH (minimum 12px)
   const base = n.size ?? (n.kind === "title" ? 72 : 22);
   const [fs, setFs] = useState(base);
   useLayoutEffect(() => {
@@ -586,7 +586,7 @@ function NoteView(props: { note: Note; zoom: number; selected: boolean; onSelect
           }
         }}
         onBlur={(e) => {
-          // 한글 조합 중 포커스가 빠지면 조합이 끝난 뒤 저장
+          // If focus leaves during IME composition, save after composition ends
           if (composing.current) blurPending.current = true;
           else commitText(e.currentTarget as HTMLDivElement);
         }}
@@ -626,7 +626,7 @@ function NoteView(props: { note: Note; zoom: number; selected: boolean; onSelect
   );
 }
 
-/** 포인터로 끌기: 시작값 + (이동량 / 확대율) */
+/** Pointer drag: start value + (delta / zoom) */
 function useDrag(zoom: number) {
   const s = useRef<{ sx: number; sy: number; ox: number; oy: number; cb: (d: { x: number; y: number }, done: boolean) => void; moved: boolean } | null>(null);
   return {
@@ -680,7 +680,7 @@ export function isTyping(e: KeyboardEvent) {
   return t.isContentEditable || /^(TEXTAREA|SELECT)$/.test(t.tagName);
 }
 
-/** 보드·메모 묶음이 화면에 꽉 차게 */
+/** Fit a group of boards and notes to the view */
 export function fitView(rects: Rect[], size: { w: number; h: number }, pad = 60): View {
   if (!rects.length) return { x: 0, y: 0, zoom: 1 };
   if (size.w < 100 || size.h < 100) size = { w: window.innerWidth, h: Math.max(200, window.innerHeight - 48) };

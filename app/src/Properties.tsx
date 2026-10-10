@@ -1,12 +1,12 @@
 // AI-generated with Claude Code, 2026-10-09, reviewed by Hyun Park
-// 속성 패널: 값을 바꾸면 setStyle/setAttr를 보낸다. 토큰 색 7개는 스와치. PLAN.md 5장.
+// Properties panel: changing a value sends setStyle/setAttr. The 7 token colors are swatches. PLAN.md section 5.
 import { useEffect, useState } from "react";
 
 import { contrast, offToken, themeColors, type Tokens } from "./ds";
 import type { Selection } from "./types";
 import { strings } from "./strings";
 
-/** docs/design/README.md 디자인 토큰 색 */
+/** Design token colors from docs/design/README.md */
 export const TOKEN_COLORS = [
   { name: strings.properties.tokenColors.text, value: "#111111" },
   { name: strings.properties.tokenColors.secondaryText, value: "#6B6B6B" },
@@ -42,7 +42,7 @@ const FIELDS: { prop: string; label: string; options?: string[]; color?: boolean
   { prop: "opacity", label: strings.properties.fields.opacity },
 ];
 
-/** grid-template-columns/rows → 칸 수. repeat(N, …)이면 N, 아니면 트랙 개수 */
+/** grid-template-columns/rows → track count. N for repeat(N, …), otherwise the number of tracks */
 export function gridCount(v: string | undefined): number | null {
   if (!v || v === "none") return null;
   const m = v.match(/^\s*repeat\(\s*(\d+)\s*,/);
@@ -88,7 +88,7 @@ export function Properties(props: {
   onAlign: (dir: AlignDir) => void;
   onReplaceImage: (() => void) | null;
   tokens: Tokens | null;
-  /** 글자 명암 계산용 실제 배경색 */
+  /** Actual background color, for text contrast */
   bg: string;
 }) {
   const s = props.selection;

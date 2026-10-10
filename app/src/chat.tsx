@@ -1,5 +1,5 @@
 // AI-generated with Claude Code, 2026-10-09, reviewed by Hyun Park
-// 캔버스 안 채팅: 에이전트(Claude Code·Codex) 선택, 선택·보드·댓글·참고 자료 첨부, 스트리밍·취소, N가지 안.
+// In-canvas chat: agent choice (Claude Code, Codex), attaching selection, boards, comments and references, streaming and cancel, N variants.
 import { useEffect, useRef, useState } from "react";
 
 import { api } from "./api";
@@ -69,11 +69,11 @@ export function ChatPanel(p: {
     try {
       localStorage.setItem("design-canvas:agent", agent);
     } catch {
-      /* 무시 */
+      /* ignore */
     }
   }, [agent]);
 
-  // 서버 이벤트 → 메시지. 보내기 응답보다 먼저 온 이벤트는 모아 뒀다가 붙인다
+  // Server events → messages. Events that arrive before the send response are buffered and attached later
   const known = useRef(new Set<string>());
   const pending = useRef(new Map<string, ChatEvent[]>());
   const applyRef = useRef<(id: string, ev: ChatEvent) => void>(() => {});
@@ -336,7 +336,7 @@ export function ChatPanel(p: {
             }
           }}
           onKeyDown={(e) => {
-            if (e.nativeEvent.isComposing || e.keyCode === 229) return; // 한글 조합 중 Enter는 글자 확정
+            if (e.nativeEvent.isComposing || e.keyCode === 229) return; // Enter during IME composition commits the character
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               void send();

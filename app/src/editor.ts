@@ -1,7 +1,7 @@
 // AI-generated with Claude Code, 2026-10-09, reviewed by Hyun Park
-// 편집 모드: iframe(같은 출처) 안 요소의 경로·사각형·스타일. PLAN.md 3장·5장.
+// Edit mode: paths, rects and styles of elements inside the (same-origin) iframe. PLAN.md sections 3 and 5.
 
-/** <body>의 자식부터 요소 자식 인덱스를 "/"로 잇는다(서버 parse5와 같은 규칙) */
+/** Joins element-child indexes with "/", starting from <body>'s children (same rule as the server's parse5) */
 export function pathOf(el: Element): string | null {
   const doc = el.ownerDocument;
   const parts: number[] = [];
@@ -27,7 +27,7 @@ export function elementAt(doc: Document, path: string): Element | null {
 
 export type Rect = { x: number; y: number; w: number; h: number };
 
-/** iframe 문서 안의 사각형(보드 좌표 = iframe CSS px) */
+/** Rect inside the iframe document (board coordinates = iframe CSS px) */
 export function rectOf(el: Element): Rect {
   const r = el.getBoundingClientRect();
   return { x: r.left, y: r.top, w: r.width, h: r.height };
@@ -69,7 +69,7 @@ export function computedStyles(el: Element): Record<string, string> {
   return out;
 }
 
-/** style 속성의 선언들 */
+/** Declarations in the style attribute */
 export function inlineStyles(el: Element): Record<string, string> {
   const out: Record<string, string> = {};
   const s = (el as HTMLElement).style;
@@ -78,7 +78,7 @@ export function inlineStyles(el: Element): Record<string, string> {
   return out;
 }
 
-/** 에이전트에 붙여 넣을 한 줄: scr-32.html 1/2/0 "문의 보내기" (button) */
+/** One line to paste to the agent: scr-32.html 1/2/0 "Send inquiry" (button) */
 export function describe(file: string, path: string, tag: string, text: string) {
   const t = text.replace(/\s+/g, " ").trim().slice(0, 40);
   return `${file} ${path} ${t ? `"${t}" ` : ""}(${tag})`;
