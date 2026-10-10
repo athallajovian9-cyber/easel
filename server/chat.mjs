@@ -7,6 +7,7 @@ import path from "node:path";
 
 import { createBoards } from "./boards.mjs";
 import { readBody, sendJson } from "./index.mjs";
+import { readTokens } from "./tokens.mjs";
 
 /** Agent launch command. Tests override it with DESIGN_CANVAS_AGENT_CMD='{"claude":["node","fake.mjs"]}' */
 function agentCommand(agent, { prompt, resume, root, images }) {
@@ -106,8 +107,12 @@ export async function buildPrompt(ctx, body, state) {
   if (body.variants?.files?.length) {
     lines.push(`- Make ${body.variants.files.length} distinct variants of "${body.variants.base}". Copies have already been created side by side: ${body.variants.files.map((f) => `${rel0 ? rel0 + "/" : ""}screens/${f}`).join(", ")}. Take each file in a different direction, and use place_board to retitle each one like "Variant 1: summary". Do not modify the original.`);
   }
+  // Design tokens from the design folder (tokens.json, or the built-in defaults)
+  const tk = await readTokens(ctx.dir);
+  const palette = Object.entries(tk.themes?.[tk.active] ?? {}).map(([n, v]) => `${n} ${v}`).join(", ");
+  const tokenRule = `Use the design tokens (theme "${tk.active}"${tk.registered ? "" : ", defaults"}): colors ${palette}; font sizes ${tk.fontSizes.join("/")}px; radii ${tk.radii.join("/")}px; spacing in multiples of 4; font ${tk.fontFamily}. Check with check_tokens if available.`;
   lines.push(
-    `Rules: Only edit design files inside ${rel}/screens. Change only what is asked and leave everything else as is. New screens must include <meta name="board-size" content="390x844">; after creating one, use place_board to set its name and position. Colors: #111111, #6B6B6B, #C94F0C, #FFFFFF, #F5F5F3. Font: Pretendard.`,
+    `Rules: Only edit design files inside ${rel}/screens. Change only what is asked and leave everything else as is. New screens must include <meta name="board-size" content="390x844">; after creating one, use place_board to set its name and position. ${tokenRule}`,
     "",
     "[Request]",
     body.text,
@@ -177,7 +182,10 @@ export function chatRoutes({ getSelection } = {}) {
           }
           const run = { proc, agent, events: [], status: "running", prompt };
           runs.set(id, run);
+          // Show tool paths relative to the project (agents report absolute, sometimes symlink-resolved, paths)
+          const roots = [rootOf(ctx.dir), await fs.realpath(rootOf(ctx.dir)).catch(() => null)].filter(Boolean).map((r) => r + path.sep).sort((a, b) => b.length - a.length); // longest first: /private/var/… before /var/…
           const emit = (ev) => {
+            if (typeof ev.detail === "string") for (const r of roots) ev.detail = ev.detail.split(r).join("");
             run.events.push(ev);
             ctx.broadcast({ type: "chat", id, ev });
           };

@@ -10,7 +10,9 @@
 [![MCP](https://img.shields.io/badge/MCP-20%20tools-3E7BFA.svg)](#connect-your-ai-agent)
 [![Works with](https://img.shields.io/badge/works%20with-Claude%20Code%20·%20Codex-3E7BFA.svg)](#connect-your-ai-agent)
 
-<img src="docs/screenshots/overview.png" alt="Easel showing a habit tracker app: five mobile screens on an infinite canvas with notes, flow arrows, a board list and a properties panel with token and accessibility checks" width="100%">
+<img src="docs/screenshots/demo.gif" alt="Demo: editing text in place on a mobile screen, then asking Claude Code in the AI tab to rename a heading and recolor a bar; the board redraws with the change" width="100%">
+
+<sub>A real Claude Code run on the bundled demo (the agent's thinking time is sped up 4×).</sub>
 
 </div>
 
@@ -43,6 +45,9 @@ npx easel-canvas --dir ./designs  # any folder of screens/*.html
 ## Features
 
 <table>
+  <tr>
+    <td colspan="2"><img src="docs/screenshots/overview.png" alt="Easel showing a habit tracker app: five mobile screens on an infinite canvas with notes, flow arrows, a board list and a properties panel with token and accessibility checks"></td>
+  </tr>
   <tr>
     <td width="50%"><img src="docs/screenshots/edit-mode.png" alt="Edit mode: an element selected inside a mobile screen with handles, and a properties panel with token chips"></td>
     <td width="50%"><img src="docs/screenshots/ai-chat.png" alt="AI chat panel: a streamed reply from Claude Code with Read and Edit tool lines, and the edited Stats screen on the canvas"></td>
